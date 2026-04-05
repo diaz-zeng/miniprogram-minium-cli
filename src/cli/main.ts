@@ -15,6 +15,7 @@ import {
   RuntimeLaunchError,
   type ExecutePlanResponse,
 } from "../runtime";
+import { installBundledSkills, SkillInstallError } from "../skills";
 
 export interface CliIo {
   stdout: { write(chunk: string): void };
@@ -37,10 +38,17 @@ interface PrepareRuntimeOptions {
   json: boolean;
 }
 
+interface InstallOptions {
+  skills: boolean;
+  path?: string;
+  json: boolean;
+}
+
 type ParsedArgv =
   | { command: "help"; options: Record<string, never> }
   | { command: "exec"; options: ExecOptions }
-  | { command: "prepare-runtime"; options: PrepareRuntimeOptions };
+  | { command: "prepare-runtime"; options: PrepareRuntimeOptions }
+  | { command: "install"; options: InstallOptions };
 
 export class CliUsageError extends Error {
   constructor(message: string) {
@@ -131,6 +139,36 @@ export function parseArgv(argv: string[]): ParsedArgv {
     };
   }
 
+  if (command === "install") {
+    const options: InstallOptions = {
+      skills: false,
+      json: false,
+    };
+    while (args.length > 0) {
+      const token = args.shift() as string;
+      switch (token) {
+        case "--skills":
+          options.skills = true;
+          break;
+        case "--path":
+          options.path = shiftRequiredValue(args, token);
+          break;
+        case "--json":
+          options.json = true;
+          break;
+        default:
+          throw new CliUsageError(t(getDefaultLanguage(), "cli.unknownArgument", { token }));
+      }
+    }
+    if (!options.skills) {
+      throw new CliUsageError(t(getDefaultLanguage(), "cli.installSkillsRequired"));
+    }
+    return {
+      command,
+      options,
+    };
+  }
+
   throw new CliUsageError(t(getDefaultLanguage(), "cli.unknownCommand", { command }));
 }
 
@@ -157,10 +195,12 @@ export function formatHelp(language: CliLanguage = getDefaultLanguage()): string
     t(language, "help.usage"),
     "  miniprogram-minium-cli exec (--plan <file> | --plan-json <json>) [--project-path <path>] [--wechat-devtool-path <path>] [--runtime-mode <mode>] [--auto-screenshot <mode>] [--json]",
     "  miniprogram-minium-cli prepare-runtime [--json]",
+    "  miniprogram-minium-cli install --skills [--path <path>] [--json]",
     "",
     t(language, "help.commands"),
     `  exec            ${t(language, "help.exec")}`,
     `  prepare-runtime ${t(language, "help.prepareRuntime")}`,
+    `  install         ${t(language, "help.install")}`,
   ].join("\n");
 }
 
@@ -182,6 +222,9 @@ export async function main(
     if (parsed.command === "prepare-runtime") {
       return handlePrepareRuntime(parsed.options, io);
     }
+    if (parsed.command === "install") {
+      return handleInstall(parsed.options, io);
+    }
     throw new CliUsageError(
       t(language, "cli.unknownCommand", { command: String((parsed as { command: string }).command) }),
     );
@@ -200,6 +243,10 @@ export async function main(
       if (error.details && Object.keys(error.details).length > 0) {
         io.stderr.write(`${JSON.stringify(error.details, null, 2)}\n`);
       }
+      return 4;
+    }
+    if (error instanceof SkillInstallError) {
+      io.stderr.write(`${message}\n`);
       return 4;
     }
     throw error;
@@ -282,6 +329,28 @@ async function handlePrepareRuntime(options: PrepareRuntimeOptions, io: CliIo): 
     if (prepared.details?.executable) {
       io.stdout.write(`${t(language, "cli.runtimeInterpreterPath", { path: prepared.details.executable })}\n`);
     }
+  }
+  return 0;
+}
+
+async function handleInstall(options: InstallOptions, io: CliIo): Promise<number> {
+  const language = getDefaultLanguage();
+  const installed = await installBundledSkills({
+    targetRoot: options.path,
+  });
+  if (installed.installed.length === 0) {
+    throw new SkillInstallError(t(language, "cli.noBundledSkills"));
+  }
+
+  if (options.json) {
+    io.stdout.write(`${JSON.stringify({ ok: true, ...installed }, null, 2)}\n`);
+    return 0;
+  }
+
+  io.stdout.write(`${t(language, "cli.installCompleted")}\n`);
+  io.stdout.write(`${t(language, "cli.installTargetRoot", { path: installed.targetRoot })}\n`);
+  for (const skill of installed.installed) {
+    io.stdout.write(`${t(language, "cli.installSkill", { name: skill.name, path: skill.targetDir })}\n`);
   }
   return 0;
 }

@@ -73,6 +73,46 @@ npm install -g miniprogram-minium-cli
 
 CLI 会按需准备并复用自己的私有 `uv` 托管 Python 运行时。用户不需要为这个工具单独维护全局 Python 环境。
 
+将随包 skill 安装到默认本地 skills 目录：
+
+```bash
+miniprogram-minium-cli install --skills
+```
+
+当包已经在本地可用时，可以通过 `npx` 安装随包 skill：
+
+```bash
+npx --no-install miniprogram-minium-cli install --skills
+```
+
+如果还没有全局安装，也可以直接通过 `npx` 安装：
+
+```bash
+npx miniprogram-minium-cli install --skills
+```
+
+也可以通过开放的 `skills` 工具直接从这个仓库安装：
+
+```bash
+npx skills add diaz-zeng/miniprogram-minium-cli --skill miniprogram-minium-cli
+```
+
+如果想先查看这个仓库暴露了哪些 skills，可以先执行：
+
+```bash
+npx skills add diaz-zeng/miniprogram-minium-cli --list
+```
+
+安装到自定义 skills 根目录：
+
+```bash
+miniprogram-minium-cli install --skills --path /path/to/skills
+```
+
+默认情况下，该命令会安装到当前执行目录下的 `./.agents/skills`。如果你要给 Claude Code、GitHub Copilot 或其他 coding agent 使用，请通过 `--path` 指向对应 agent 的本地或全局 skills 目录。
+
+如果对应 agent 已经支持开放的 `skills` 生态，也可以直接执行 `npx skills add diaz-zeng/miniprogram-minium-cli --skill miniprogram-minium-cli` 从仓库安装。
+
 ## 快速开始
 
 预热托管运行时：
@@ -164,6 +204,28 @@ miniprogram-minium-cli prepare-runtime [--json]
 - 预加载 `uv`
 - 准备托管 Python 运行时
 - 降低首次真实执行的冷启动成本
+
+### `install`
+
+```bash
+miniprogram-minium-cli install --skills [--path <path>] [--json]
+```
+
+用途：
+
+- 将随包附带的 `miniprogram-minium-cli` skill 安装到当前执行目录下的 `./.agents/skills`，或安装到其他 coding agent 的自定义 skills 根目录
+
+主要参数：
+
+- `--skills`：安装当前包中附带的所有 bundled skills
+- `--path <path>`：安装到自定义 skills 根目录，而不是当前执行目录下默认的 `./.agents/skills`
+- `--json`：输出结构化安装结果
+
+默认安装目录：
+
+- 当前执行目录下的 `./.agents/skills`
+
+如果你想安装到共享全局目录，或要给 Claude Code、GitHub Copilot 等其他 coding agent 使用，请通过 `--path` 指向目标 skills 目录。
 
 ## 运行产物
 

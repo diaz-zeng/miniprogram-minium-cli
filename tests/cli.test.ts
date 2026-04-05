@@ -1,7 +1,11 @@
 import * as assert from "node:assert/strict";
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
+import * as path from "node:path";
 import { test } from "node:test";
 
 import { deriveExecutionExitCode, formatHelp, main, parseArgv } from "../src/cli/main";
+import { installBundledSkills, resolveDefaultSkillTargetRoot } from "../src/skills";
 
 test("parseArgv parses exec command", () => {
   const parsed = parseArgv([
@@ -51,6 +55,17 @@ test("parseArgv parses prepare-runtime command", () => {
   if (parsed.command !== "prepare-runtime") {
     return;
   }
+  assert.equal(parsed.options.json, true);
+});
+
+test("parseArgv parses install command", () => {
+  const parsed = parseArgv(["install", "--skills", "--path", "./tmp/skills", "--json"]);
+  assert.equal(parsed.command, "install");
+  if (parsed.command !== "install") {
+    return;
+  }
+  assert.equal(parsed.options.skills, true);
+  assert.equal(parsed.options.path, "./tmp/skills");
   assert.equal(parsed.options.json, true);
 });
 
@@ -130,6 +145,59 @@ test("main reports usage errors for removed run command", async () => {
 
   assert.equal(exitCode, 2);
   assert.match(stderr, /Unknown command|未知命令/);
+});
+
+test("main reports usage errors for install without --skills", async () => {
+  let stderr = "";
+  const exitCode = await main(["install"], {
+    stdout: { write() {} },
+    stderr: { write(chunk: string) { stderr += chunk; } },
+  });
+
+  assert.equal(exitCode, 2);
+  assert.match(stderr, /requires `--skills`|需要显式提供 `--skills`/);
+});
+
+test("main installs bundled skills into a custom path", async () => {
+  const targetRoot = await fs.mkdtemp(path.join(os.tmpdir(), "minium-cli-skills-"));
+  let stdout = "";
+
+  try {
+    const exitCode = await main(["install", "--skills", "--path", targetRoot, "--json"], {
+      stdout: { write(chunk: string) { stdout += chunk; } },
+      stderr: { write() {} },
+    });
+
+    assert.equal(exitCode, 0);
+    const parsed = JSON.parse(stdout);
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.targetRoot, targetRoot);
+    assert.ok(Array.isArray(parsed.installed));
+    assert.ok(parsed.installed.some((entry: { name: string }) => entry.name === "miniprogram-minium-cli"));
+    await fs.access(path.join(targetRoot, "miniprogram-minium-cli", "SKILL.md"));
+    await fs.access(path.join(targetRoot, "miniprogram-minium-cli", "references", "execution.md"));
+  } finally {
+    await fs.rm(targetRoot, { recursive: true, force: true });
+  }
+});
+
+test("resolveDefaultSkillTargetRoot uses .agents/skills under the current working directory", () => {
+  const targetRoot = resolveDefaultSkillTargetRoot("/Users/example/project");
+
+  assert.equal(targetRoot, path.resolve("/Users/example/project", ".agents", "skills"));
+});
+
+test("installBundledSkills defaults into .agents/skills under cwd", async () => {
+  const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "minium-cli-cwd-"));
+
+  try {
+    const result = await installBundledSkills({ cwd });
+
+    assert.equal(result.targetRoot, path.resolve(cwd, ".agents", "skills"));
+    await fs.access(path.join(result.targetRoot, "miniprogram-minium-cli", "SKILL.md"));
+  } finally {
+    await fs.rm(cwd, { recursive: true, force: true });
+  }
 });
 
 test("main executes an inline json plan", async () => {

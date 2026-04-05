@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-04-05
+
+### Added
+
+- A first-party repository skill under `skills/miniprogram-minium-cli/` for product usage across coding agents.
+- Skill installation through `install --skills` and repository-based installation through the open `skills` tool.
+
+### Changed
+
+- Promoted the published beta line to the first stable `1.0.0` release.
+- The default bundled skill installation root is now `./.agents/skills` under the current working directory, while `--path` supports shared global or agent-specific roots.
+
 ## [1.0.0-beta.0] - 2026-04-05
 
 ### Added

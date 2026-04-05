@@ -8,6 +8,18 @@
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-04-05
+
+### Added
+
+- 在 `skills/miniprogram-minium-cli/` 下提供由仓库维护的一方产品使用类 skill，可供不同 coding agent 复用。
+- 支持通过 `install --skills` 安装随包 skill，并支持通过开放的 `skills` 工具从仓库直接安装。
+
+### Changed
+
+- 将已发布的 beta 版本线正式提升为首个稳定版 `1.0.0`。
+- 默认的随包 skill 安装目录调整为当前执行目录下的 `./.agents/skills`，同时可通过 `--path` 安装到共享全局或特定 agent 目录。
+
 ## [1.0.0-beta.0] - 2026-04-05
 
 ### Added

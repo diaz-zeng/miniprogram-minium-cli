@@ -10,6 +10,7 @@ This document describes the command-line API and the structured plan API of `min
 
 - `exec`
 - `prepare-runtime`
+- `install`
 - `help`
 
 ## `exec`
@@ -168,6 +169,67 @@ When `--json` is used, the output includes fields such as:
 - `pythonRequest`
 - `details`
 - `cacheBaseDir`
+
+## `install`
+
+Install the packaged bundled skills into `./.agents/skills` under the current working directory, or a custom skills root for other coding agents.
+
+### Syntax
+
+```bash
+miniprogram-minium-cli install --skills [--path <path>] [--json]
+```
+
+### Required Input
+
+- `--skills`
+
+The current install workflow is explicitly scoped to bundled skill installation.
+
+### Options
+
+#### `--path <path>`
+
+Install into a custom skills root.
+
+- Type: string
+- Default when omitted:
+  - `./.agents/skills` under the current working directory
+
+Use this option when you want a shared global directory or when Claude Code, GitHub Copilot, or another coding agent expects a different local skills root.
+
+#### `--json`
+
+Print structured installation details.
+
+- Type: flag
+- Default: disabled
+
+### Output
+
+The command installs every bundled skill directory from the package into the target skills root.
+
+When `--json` is used, the output includes fields such as:
+
+- `targetRoot`
+- `packageRoot`
+- `installed`
+
+### Invocation patterns
+
+The command can be invoked in all of the following ways:
+
+```bash
+miniprogram-minium-cli install --skills
+npx --no-install miniprogram-minium-cli install --skills
+npx miniprogram-minium-cli install --skills
+```
+
+The repository skill can also be installed through the open `skills` tool:
+
+```bash
+npx skills add diaz-zeng/miniprogram-minium-cli --skill miniprogram-minium-cli
+```
 
 ## `help`
 

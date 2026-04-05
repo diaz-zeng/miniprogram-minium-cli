@@ -10,6 +10,7 @@
 
 - `exec`
 - `prepare-runtime`
+- `install`
 - `help`
 
 ## `exec`
@@ -168,6 +169,67 @@ miniprogram-minium-cli prepare-runtime [--json]
 - `pythonRequest`
 - `details`
 - `cacheBaseDir`
+
+## `install`
+
+将随包附带的 bundled skills 安装到当前执行目录下的 `./.agents/skills`，或安装到其他 coding agent 的自定义 skills 根目录。
+
+### 语法
+
+```bash
+miniprogram-minium-cli install --skills [--path <path>] [--json]
+```
+
+### 必需输入
+
+- `--skills`
+
+当前安装流程明确只覆盖 bundled skill 的安装。
+
+### 参数
+
+#### `--path <path>`
+
+安装到自定义 skills 根目录。
+
+- 类型：字符串
+- 默认值：
+  - 当前执行目录下的 `./.agents/skills`
+
+如果你想安装到共享全局目录，或 Claude Code、GitHub Copilot 等其他 coding agent 需要不同的本地 skills 根目录，请使用这个参数覆盖默认值。
+
+#### `--json`
+
+输出结构化安装结果。
+
+- 类型：开关参数
+- 默认：关闭
+
+### 输出
+
+该命令会把当前包中附带的每个 bundled skill 目录安装到目标 skills 根目录中。
+
+使用 `--json` 时，输出通常包含：
+
+- `targetRoot`
+- `packageRoot`
+- `installed`
+
+### 调用方式
+
+这个命令可以通过以下几种方式调用：
+
+```bash
+miniprogram-minium-cli install --skills
+npx --no-install miniprogram-minium-cli install --skills
+npx miniprogram-minium-cli install --skills
+```
+
+这个仓库里的 skill 也可以通过开放的 `skills` 工具安装：
+
+```bash
+npx skills add diaz-zeng/miniprogram-minium-cli --skill miniprogram-minium-cli
+```
 
 ## `help`
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Mini Program Minium CLI"
+  short_description: "Use the CLI, install its bundled skill, and work with plans and run artifacts"
+  default_prompt: "Use miniprogram-minium-cli to prepare runtime, author or execute plans, install bundled skills, or analyze run artifacts."

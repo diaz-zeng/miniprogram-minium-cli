@@ -73,6 +73,46 @@ Host requirement:
 
 The CLI prepares and reuses its own private `uv`-managed Python runtime on demand. It does not require the user to install or manage a global Python environment for this tool.
 
+Install the bundled skill into the default local skills directory:
+
+```bash
+miniprogram-minium-cli install --skills
+```
+
+Install the bundled skill through `npx` when the package is available locally:
+
+```bash
+npx --no-install miniprogram-minium-cli install --skills
+```
+
+Install directly through `npx` without a prior global install:
+
+```bash
+npx miniprogram-minium-cli install --skills
+```
+
+Install directly from this repository through the open `skills` tool:
+
+```bash
+npx skills add diaz-zeng/miniprogram-minium-cli --skill miniprogram-minium-cli
+```
+
+List the skills exposed by this repository before installing:
+
+```bash
+npx skills add diaz-zeng/miniprogram-minium-cli --list
+```
+
+Install into a custom skills root:
+
+```bash
+miniprogram-minium-cli install --skills --path /path/to/skills
+```
+
+By default, the command installs into `./.agents/skills` under the current working directory. For Claude Code, GitHub Copilot, and other coding agents, use `--path` to target an agent-specific local or global skills directory.
+
+If your agent already supports the open `skills` ecosystem, you can also install from the repository with `npx skills add diaz-zeng/miniprogram-minium-cli --skill miniprogram-minium-cli`.
+
 ## Quick Start
 
 Warm up the managed runtime:
@@ -164,6 +204,28 @@ Purpose:
 - preload `uv`
 - prepare the managed Python runtime
 - reduce cold-start cost before the first real execution
+
+### `install`
+
+```bash
+miniprogram-minium-cli install --skills [--path <path>] [--json]
+```
+
+Purpose:
+
+- install the bundled `miniprogram-minium-cli` skill into `./.agents/skills` under the current working directory, or a custom skills root for other coding agents
+
+Primary options:
+
+- `--skills`: install all bundled skills from this package
+- `--path <path>`: install into a custom skills root instead of `./.agents/skills` under the current working directory
+- `--json`: print structured installation output
+
+Default installation root:
+
+- `./.agents/skills` under the current working directory
+
+Use `--path` when you want a shared global directory or an agent-specific local skills directory.
 
 ## Execution Output
 

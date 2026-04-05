@@ -20,6 +20,12 @@ This repository hosts an AI-first CLI for mini program automation and testing.
 - The Chinese mirror document lives at `docs/README.zh-CN.md`.
 - Keep the English and Chinese README files cross-linked when editing either one.
 
+## Skills Rules
+
+- Product-use skills for this repository live under the top-level `skills/` directory.
+- Keep repository-managed skills aligned with the documented CLI contract in `README.md` and `docs/API_REFERENCE.md`.
+- Do not mix OpenSpec workflow guidance into the product-use skill content.
+
 ## Commit Rules
 
 - Use English commit messages.
