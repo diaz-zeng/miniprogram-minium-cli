@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "kind": "miniapp-test-plan",
+  "metadata": {
+    "name": "demo-assertion-failure-exact",
+    "draft": false
+  },
+  "environment": {
+    "projectPath": "../demo-miniapp",
+    "wechatDevtoolPath": null,
+    "testPort": 9420,
+    "language": "en-US",
+    "runtimeMode": "auto"
+  },
+  "execution": {
+    "mode": "serial",
+    "failFast": true
+  },
+  "steps": [
+    {
+      "id": "step-1",
+      "type": "session.start",
+      "input": {
+        "projectPath": "../demo-miniapp",
+        "initialPagePath": "/pages/home/index"
+      }
+    },
+    {
+      "id": "step-2",
+      "type": "assert.pagePath",
+      "input": {
+        "expectedPath": "pages/not-found/index"
+      }
+    },
+    {
+      "id": "step-3",
+      "type": "session.close",
+      "input": {}
+    }
+  ]
+}

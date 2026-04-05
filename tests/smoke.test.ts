@@ -1,0 +1,484 @@
+import * as assert from "node:assert/strict";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import * as net from "node:net";
+import { test } from "node:test";
+
+import type { Plan } from "../src/plan";
+import { executePlanWithPython } from "../src/runtime";
+
+function createArtifactsDir(prefix: string): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), `${prefix}-`));
+}
+
+function createBasePlan(artifactsDir: string): Plan {
+  return {
+    version: 1,
+    kind: "miniapp-test-plan",
+    metadata: {
+      name: "smoke-plan",
+      draft: false,
+    },
+    environment: {
+      projectPath: ".",
+      artifactsDir,
+      wechatDevtoolPath: null,
+      testPort: 9420,
+      language: "en-US",
+      runtimeMode: "placeholder",
+    },
+    execution: {
+      mode: "serial",
+      failFast: true,
+    },
+    steps: [],
+  };
+}
+
+async function getAvailablePort(): Promise<number> {
+  return await new Promise<number>((resolve, reject) => {
+    const server = net.createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        server.close(() => reject(new Error("Failed to resolve a dynamic port.")));
+        return;
+      }
+      const { port } = address;
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(port);
+      });
+    });
+  });
+}
+
+test("placeholder gesture smoke flow passes end-to-end", async () => {
+  const artifactsDir = createArtifactsDir("minium-cli-gesture");
+  const plan: Plan = {
+    ...createBasePlan(artifactsDir),
+    metadata: {
+      name: "gesture-smoke",
+      draft: false,
+    },
+    steps: [
+      { id: "step-1", type: "session.start", input: { projectPath: "." } },
+      { id: "step-2", type: "gesture.touchStart", input: { pointerId: 0, locator: { type: "id", value: "login-button" } } },
+      { id: "step-3", type: "gesture.touchTap", input: { pointerId: 1, x: 210, y: 260 } },
+      { id: "step-4", type: "gesture.touchMove", input: { pointerId: 0, x: 200, y: 300 } },
+      { id: "step-5", type: "gesture.touchEnd", input: { pointerId: 0 } },
+      { id: "step-6", type: "session.close", input: {} },
+    ],
+  };
+
+  const execution = await executePlanWithPython(plan);
+  assert.equal(execution.response.ok, true);
+  const result = execution.response.result as Record<string, unknown>;
+  const summary = result.summary as Record<string, unknown>;
+  const stepResults = result.stepResults as Array<Record<string, unknown>>;
+  const artifacts = result.artifacts as Record<string, unknown>;
+
+  assert.equal(summary.status, "passed");
+  assert.equal(summary.failedCount, 0);
+  assert.equal(stepResults.length, 6);
+  assert.equal(stepResults[1]?.type, "gesture.touchStart");
+  assert.deepEqual(
+    (stepResults[4]?.output as Record<string, unknown>).active_pointers,
+    [],
+  );
+  assert.ok(fs.existsSync(String(artifacts.comparisonPath)));
+});
+
+test("auto screenshot on-success records screenshot artifacts for successful steps", async () => {
+  const artifactsDir = createArtifactsDir("minium-cli-auto-screenshot");
+  const plan: Plan = {
+    ...createBasePlan(artifactsDir),
+    metadata: {
+      name: "auto-screenshot-smoke",
+      draft: false,
+    },
+    environment: {
+      projectPath: ".",
+      artifactsDir,
+      wechatDevtoolPath: null,
+      testPort: 9420,
+      language: "en-US",
+      runtimeMode: "placeholder",
+      autoScreenshot: "on-success",
+    },
+    steps: [
+      { id: "step-1", type: "session.start", input: { projectPath: "." } },
+      { id: "step-2", type: "page.read", input: {} },
+      { id: "step-3", type: "session.close", input: {} },
+    ],
+  };
+
+  const execution = await executePlanWithPython(plan);
+  assert.equal(execution.response.ok, true);
+  const result = execution.response.result as Record<string, unknown>;
+  const summary = result.summary as Record<string, unknown>;
+  const artifacts = result.artifacts as Record<string, unknown>;
+  const screenshotPaths = artifacts.screenshotPaths as string[];
+  const stepResults = result.stepResults as Array<Record<string, unknown>>;
+
+  assert.equal(summary.status, "passed");
+  assert.ok(Array.isArray(screenshotPaths));
+  assert.ok(screenshotPaths.length >= 2);
+  for (const screenshotPath of screenshotPaths) {
+    assert.ok(fs.existsSync(screenshotPath));
+  }
+  assert.equal(
+    typeof (stepResults[0]?.output as Record<string, unknown>).auto_screenshot_artifact_path,
+    "string",
+  );
+});
+
+test("failed placeholder assertion produces skipped steps and evidence", async () => {
+  const artifactsDir = createArtifactsDir("minium-cli-failure");
+  const plan: Plan = {
+    ...createBasePlan(artifactsDir),
+    metadata: {
+      name: "failure-smoke",
+      draft: false,
+    },
+    steps: [
+      { id: "step-1", type: "session.start", input: { projectPath: "." } },
+      { id: "step-2", type: "assert.pagePath", input: { expectedPath: "pages/home/index" } },
+      { id: "step-3", type: "page.read", input: {} },
+    ],
+  };
+
+  const execution = await executePlanWithPython(plan);
+  assert.equal(execution.response.ok, true);
+  const result = execution.response.result as Record<string, unknown>;
+  const summary = result.summary as Record<string, unknown>;
+  const stepResults = result.stepResults as Array<Record<string, unknown>>;
+  const failure = summary.failure as Record<string, unknown>;
+  const artifacts = result.artifacts as Record<string, unknown>;
+
+  assert.equal(summary.status, "failed");
+  assert.equal(summary.failedCount, 1);
+  assert.equal(summary.skippedCount, 1);
+  assert.equal(stepResults[2]?.status, "skipped");
+  assert.equal(failure.error_code, "ASSERTION_FAILED");
+  assert.ok(Array.isArray(failure.artifacts));
+  assert.ok(fs.existsSync(String((failure.artifacts as string[])[0])));
+  assert.ok(fs.existsSync(String(artifacts.summaryPath)));
+  assert.ok(fs.existsSync(String(artifacts.resultPath)));
+  assert.ok(fs.existsSync(String(artifacts.comparisonPath)));
+});
+
+test("real runtime session preparation launches automation target before attaching", async () => {
+  const workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), "minium-cli-real-"));
+  const fakeModuleDir = path.join(workspaceDir, "fake-python");
+  const projectPath = path.join(workspaceDir, "miniapp");
+  const devtoolPath = path.join(workspaceDir, "wechat-devtool");
+  const artifactsDir = path.join(workspaceDir, "artifacts");
+  const testPort = await getAvailablePort();
+
+  fs.mkdirSync(fakeModuleDir, { recursive: true });
+  fs.mkdirSync(projectPath, { recursive: true });
+  fs.writeFileSync(path.join(projectPath, "project.config.json"), "{}\n", "utf8");
+  fs.writeFileSync(
+    path.join(fakeModuleDir, "minium.py"),
+    [
+      "class _Page:",
+      "    def __init__(self):",
+      "        self.path = '/pages/home/index'",
+      "        self.renderer = 'webview'",
+      "",
+      "class _App:",
+      "    def __init__(self):",
+      "        self._page = _Page()",
+      "",
+      "    def get_current_page(self):",
+      "        return self._page",
+      "",
+      "    def navigate_to(self, _path):",
+      "        return None",
+      "",
+      "class Minium:",
+      "    def __init__(self, conf):",
+      "        self.conf = conf",
+      "        self.app = _App()",
+      "",
+      "    def shutdown(self):",
+      "        return None",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  fs.writeFileSync(
+    devtoolPath,
+    [
+      "#!/bin/sh",
+      "PORT=\"\"",
+      "while [ \"$#\" -gt 0 ]; do",
+      "  if [ \"$1\" = \"--auto-port\" ]; then",
+      "    PORT=\"$2\"",
+      "    shift 2",
+      "  else",
+      "    shift",
+      "  fi",
+      "done",
+      "node -e \"const net=require('net'); const port=Number(process.argv[1]); const server=net.createServer(()=>{}); server.listen(port,'127.0.0.1',()=>{}); setTimeout(()=>server.close(()=>process.exit(0)), 15000);\" \"$PORT\" >/dev/null 2>&1 &",
+      "exit 0",
+      "",
+    ].join("\n"),
+    { encoding: "utf8", mode: 0o755 },
+  );
+
+  const plan: Plan = {
+    ...createBasePlan(artifactsDir),
+    metadata: {
+      name: "real-runtime-smoke",
+      draft: false,
+    },
+    environment: {
+      projectPath,
+      artifactsDir,
+      wechatDevtoolPath: devtoolPath,
+      testPort,
+      language: "en-US",
+      runtimeMode: "real",
+    },
+    steps: [
+      { id: "step-1", type: "session.start", input: { projectPath } },
+      { id: "step-2", type: "page.read", input: {} },
+      { id: "step-3", type: "session.close", input: {} },
+    ],
+  };
+
+  const execution = await executePlanWithPython(plan, {
+    env: {
+      ...process.env,
+      PYTHONPATH: process.env.PYTHONPATH
+        ? `${fakeModuleDir}${path.delimiter}${process.env.PYTHONPATH}`
+        : fakeModuleDir,
+    },
+  });
+
+  assert.equal(execution.response.ok, true);
+  const result = execution.response.result as Record<string, unknown>;
+  const summary = result.summary as Record<string, unknown>;
+  const stepResults = result.stepResults as Array<Record<string, unknown>>;
+  const sessionOutput = stepResults[0]?.output as Record<string, unknown>;
+
+  assert.equal(summary.status, "passed");
+  assert.equal(sessionOutput.runtime_backend, "minium");
+  assert.equal(sessionOutput.test_port, testPort);
+  assert.equal(sessionOutput.current_page_path, "pages/home/index");
+});
+
+test("real runtime multi-touch gestures dispatch through element targets", async () => {
+  const workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), "minium-cli-real-gesture-"));
+  const fakeModuleDir = path.join(workspaceDir, "fake-python");
+  const projectPath = path.join(workspaceDir, "miniapp");
+  const devtoolPath = path.join(workspaceDir, "wechat-devtool");
+  const artifactsDir = path.join(workspaceDir, "artifacts");
+  const testPort = await getAvailablePort();
+
+  fs.mkdirSync(fakeModuleDir, { recursive: true });
+  fs.mkdirSync(projectPath, { recursive: true });
+  fs.writeFileSync(path.join(projectPath, "project.config.json"), "{}\n", "utf8");
+  fs.writeFileSync(
+    path.join(fakeModuleDir, "minium.py"),
+    [
+      "class _Selector:",
+      "    def __init__(self, value):",
+      "        self._value = value",
+      "",
+      "    def full_selector(self):",
+      "        return self._value",
+      "",
+      "class _StatusElement:",
+      "    def __init__(self, page, element_id, reader):",
+      "        self._page = page",
+      "        self.id = element_id",
+      "        self.element_id = element_id",
+      "        self._tag_name = 'text'",
+      "        self.selector = _Selector(f'//*[@id=\"{element_id}\"]')",
+      "        self.rect = {'left': 0, 'top': 0, 'width': 120, 'height': 24}",
+      "        self._reader = reader",
+      "",
+      "    @property",
+      "    def inner_text(self):",
+      "        return self._reader()",
+      "",
+      "class _GestureTarget:",
+      "    def __init__(self, page):",
+      "        self._page = page",
+      "        self.id = 'gesture-target'",
+      "        self.element_id = 'gesture-target'",
+      "        self._tag_name = 'view'",
+      "        self.selector = _Selector('//*[@id=\"gesture-target\"]')",
+      "        self.rect = {'left': 40, 'top': 60, 'width': 200, 'height': 200}",
+      "",
+      "    def dispatch_event(self, event_type, touches=None, change_touches=None, detail=None, **_kwargs):",
+      "        active_count = len(touches or [])",
+      "        if event_type == 'touchstart':",
+      "            if active_count >= 2:",
+      "                self._page.status_text = 'Gesture status: two-finger-pan-zoom'",
+      "            else:",
+      "                self._page.status_text = 'Gesture status: single-finger-active'",
+      "            self._page.active_text = f'Active touches: {active_count}'",
+      "            return",
+      "        if event_type == 'touchmove':",
+      "            if active_count >= 2:",
+      "                self._page.status_text = 'Gesture status: two-finger-pan-zoom'",
+      "            self._page.active_text = f'Active touches: {active_count}'",
+      "            return",
+      "        if event_type == 'touchend':",
+      "            self._page.active_text = f'Active touches: {active_count}'",
+      "            return",
+      "        if event_type == 'tap':",
+      "            self._page.status_text = 'Gesture status: tap'",
+      "",
+      "class _Page:",
+      "    def __init__(self):",
+      "        self.path = '/pages/gesture/index'",
+      "        self.renderer = 'webview'",
+      "        self.status_text = 'Gesture status: idle'",
+      "        self.active_text = 'Active touches: 0'",
+      "        self._gesture_target = _GestureTarget(self)",
+      "        self._status_element = _StatusElement(self, 'gesture-status-text', lambda: self.status_text)",
+      "        self._active_element = _StatusElement(self, 'gesture-active-text', lambda: self.active_text)",
+      "",
+      "    def get_elements(self, selector, max_timeout=0, index=0):",
+      "        _ = max_timeout",
+      "        matches = []",
+      "        if selector == '#gesture-target':",
+      "            matches = [self._gesture_target]",
+      "        elif selector == '#gesture-status-text':",
+      "            matches = [self._status_element]",
+      "        elif selector == '#gesture-active-text':",
+      "            matches = [self._active_element]",
+      "        if index >= len(matches):",
+      "            return []",
+      "        return [matches[index]]",
+      "",
+      "    def get_elements_by_xpath(self, _xpath, max_timeout=0):",
+      "        _ = max_timeout",
+      "        return []",
+      "",
+      "class _App:",
+      "    def __init__(self):",
+      "        self._page = _Page()",
+      "",
+      "    def get_current_page(self):",
+      "        return self._page",
+      "",
+      "    def navigate_to(self, path):",
+      "        self._page.path = path",
+      "",
+      "class Minium:",
+      "    def __init__(self, conf):",
+      "        self.conf = conf",
+      "        self.app = _App()",
+      "",
+      "    def shutdown(self):",
+      "        return None",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  fs.writeFileSync(
+    devtoolPath,
+    [
+      "#!/bin/sh",
+      "PORT=\"\"",
+      "while [ \"$#\" -gt 0 ]; do",
+      "  if [ \"$1\" = \"--auto-port\" ]; then",
+      "    PORT=\"$2\"",
+      "    shift 2",
+      "  else",
+      "    shift",
+      "  fi",
+      "done",
+      "node -e \"const net=require('net'); const port=Number(process.argv[1]); const server=net.createServer(()=>{}); server.listen(port,'127.0.0.1',()=>{}); setTimeout(()=>server.close(()=>process.exit(0)), 15000);\" \"$PORT\" >/dev/null 2>&1 &",
+      "exit 0",
+      "",
+    ].join("\n"),
+    { encoding: "utf8", mode: 0o755 },
+  );
+
+  const plan: Plan = {
+    ...createBasePlan(artifactsDir),
+    metadata: {
+      name: "real-runtime-gesture",
+      draft: false,
+    },
+    environment: {
+      projectPath,
+      artifactsDir,
+      wechatDevtoolPath: devtoolPath,
+      testPort,
+      language: "en-US",
+      runtimeMode: "real",
+    },
+    steps: [
+      { id: "step-1", type: "session.start", input: { projectPath, initialPagePath: "/pages/gesture/index" } },
+      { id: "step-2", type: "gesture.touchStart", input: { pointerId: 0, locator: { type: "id", value: "gesture-target" } } },
+      { id: "step-3", type: "gesture.touchStart", input: { pointerId: 1, locator: { type: "id", value: "gesture-target" } } },
+      { id: "step-4", type: "assert.elementText", input: { locator: { type: "id", value: "gesture-status-text" }, expectedText: "Gesture status: two-finger-pan-zoom" } },
+      { id: "step-5", type: "assert.elementText", input: { locator: { type: "id", value: "gesture-active-text" }, expectedText: "Active touches: 2" } },
+      { id: "step-6", type: "gesture.touchEnd", input: { pointerId: 0 } },
+      { id: "step-7", type: "gesture.touchEnd", input: { pointerId: 1 } },
+      { id: "step-8", type: "assert.elementText", input: { locator: { type: "id", value: "gesture-active-text" }, expectedText: "Active touches: 0" } },
+      { id: "step-9", type: "session.close", input: {} },
+    ],
+  };
+
+  const execution = await executePlanWithPython(plan, {
+    env: {
+      ...process.env,
+      PYTHONPATH: process.env.PYTHONPATH
+        ? `${fakeModuleDir}${path.delimiter}${process.env.PYTHONPATH}`
+        : fakeModuleDir,
+    },
+  });
+
+  assert.equal(execution.response.ok, true);
+  const result = execution.response.result as Record<string, unknown>;
+  const summary = result.summary as Record<string, unknown>;
+  const stepResults = result.stepResults as Array<Record<string, unknown>>;
+
+  assert.equal(summary.status, "passed");
+  assert.equal(stepResults[1]?.status, "passed");
+  assert.equal(stepResults[2]?.status, "passed");
+  assert.equal(stepResults[7]?.status, "passed");
+});
+
+test("localized runtime failures keep structured fields stable", async () => {
+  const artifactsDir = createArtifactsDir("minium-cli-zh-failure");
+  const plan: Plan = {
+    ...createBasePlan(artifactsDir),
+    environment: {
+      projectPath: ".",
+      artifactsDir,
+      wechatDevtoolPath: null,
+      testPort: 9420,
+      language: "zh-CN",
+      runtimeMode: "placeholder",
+    },
+    steps: [
+      { id: "step-1", type: "session.start", input: { projectPath: "." } },
+      { id: "step-2", type: "assert.pagePath", input: { expectedPath: "pages/home/index" } },
+    ],
+  };
+
+  const execution = await executePlanWithPython(plan);
+  assert.equal(execution.response.ok, true);
+  const result = execution.response.result as Record<string, unknown>;
+  const summary = result.summary as Record<string, unknown>;
+  const failure = summary.failure as Record<string, unknown>;
+
+  assert.equal(failure.error_code, "ASSERTION_FAILED");
+  assert.match(String(failure.message), /页面路径断言失败/);
+  assert.equal((failure.details as Record<string, unknown>).expected_value, "pages/home/index");
+});

@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "kind": "miniapp-test-plan",
+  "metadata": {
+    "name": "demo-login-to-home-exact",
+    "draft": false
+  },
+  "environment": {
+    "projectPath": "../demo-miniapp",
+    "wechatDevtoolPath": null,
+    "testPort": 9420,
+    "language": "en-US",
+    "runtimeMode": "auto"
+  },
+  "execution": {
+    "mode": "serial",
+    "failFast": true
+  },
+  "steps": [
+    {
+      "id": "step-1",
+      "type": "session.start",
+      "input": {
+        "projectPath": "../demo-miniapp"
+      }
+    },
+    {
+      "id": "step-2",
+      "type": "assert.pagePath",
+      "input": {
+        "expectedPath": "pages/login/index"
+      }
+    },
+    {
+      "id": "step-3",
+      "type": "assert.elementText",
+      "input": {
+        "locator": {
+          "type": "id",
+          "value": "login-title"
+        },
+        "expectedText": "Demo Login"
+      }
+    },
+    {
+      "id": "step-4",
+      "type": "element.click",
+      "input": {
+        "locator": {
+          "type": "id",
+          "value": "login-button"
+        }
+      }
+    },
+    {
+      "id": "step-5",
+      "type": "wait.for",
+      "input": {
+        "condition": {
+          "kind": "page_path_equals",
+          "expectedValue": "pages/home/index",
+          "timeoutMs": 4000
+        }
+      }
+    },
+    {
+      "id": "step-6",
+      "type": "assert.elementText",
+      "input": {
+        "locator": {
+          "type": "id",
+          "value": "home-title"
+        },
+        "expectedText": "Demo Home"
+      }
+    },
+    {
+      "id": "step-7",
+      "type": "assert.elementText",
+      "input": {
+        "locator": {
+          "type": "id",
+          "value": "login-state-text"
+        },
+        "expectedText": "Login state: logged-in"
+      }
+    },
+    {
+      "id": "step-8",
+      "type": "session.close",
+      "input": {}
+    }
+  ]
+}

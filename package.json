@@ -1,0 +1,56 @@
+{
+  "name": "miniprogram-minium-cli",
+  "version": "1.0.0-beta.0",
+  "description": "面向 Agent 的小程序 Minium CLI 工具",
+  "main": "lib/src/index.js",
+  "types": "lib/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/src/index.d.ts",
+      "require": "./lib/src/index.js",
+      "default": "./lib/src/index.js"
+    }
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "miniprogram-minium-cli": "lib/index.js"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/src/**/*.js",
+    "lib/src/**/*.d.ts",
+    "python/miniprogram_minium_cli/**/*.py",
+    "python/pyproject.toml",
+    "python/uv.lock",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test lib/tests/*.test.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.14",
+    "typescript": "^5.8.3"
+  },
+  "keywords": [
+    "agent",
+    "cli",
+    "miniprogram",
+    "minium"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/diaz-zeng/miniprogram-minium-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/diaz-zeng/miniprogram-minium-cli/issues"
+  },
+  "homepage": "https://github.com/diaz-zeng/miniprogram-minium-cli#readme",
+  "author": "diaz-zeng <diaz_zeng@outlook.com>",
+  "license": "MIT"
+}

@@ -1,0 +1,29 @@
+# Node.js
+node_modules/
+examples/demo-miniapp/node_modules/
+examples/demo-miniapp/.swc/
+examples/demo-miniapp/dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lib/
+coverage/
+*.tgz
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+
+# Project runtime artifacts
+.codex/
+.minium-cli/

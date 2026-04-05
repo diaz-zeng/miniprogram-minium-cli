@@ -1,0 +1,115 @@
+{
+  "version": 1,
+  "kind": "miniapp-test-plan",
+  "metadata": {
+    "name": "demo-home-practice-save-mixed",
+    "draft": false
+  },
+  "environment": {
+    "projectPath": "../demo-miniapp",
+    "wechatDevtoolPath": null,
+    "testPort": 9420,
+    "language": "en-US",
+    "runtimeMode": "auto"
+  },
+  "execution": {
+    "mode": "serial",
+    "failFast": true
+  },
+  "steps": [
+    {
+      "id": "step-1",
+      "type": "session.start",
+      "input": {
+        "projectPath": "../demo-miniapp",
+        "initialPagePath": "/pages/home/index"
+      }
+    },
+    {
+      "id": "step-2",
+      "type": "element.click",
+      "input": {
+        "locator": {
+          "type": "id",
+          "value": "open-practice-panel-button"
+        }
+      }
+    },
+    {
+      "id": "step-3",
+      "type": "wait.for",
+      "input": {
+        "condition": {
+          "kind": "element_visible",
+          "locator": {
+            "type": "text",
+            "value": "Practice form is ready"
+          },
+          "timeoutMs": 2000
+        }
+      }
+    },
+    {
+      "id": "step-4",
+      "type": "assert.elementText",
+      "input": {
+        "locator": {
+          "type": "id",
+          "value": "practice-modal-title"
+        },
+        "expectedText": "Practice form is ready"
+      }
+    },
+    {
+      "id": "step-5",
+      "type": "element.input",
+      "input": {
+        "locator": {
+          "type": "id",
+          "value": "practice-count-input"
+        },
+        "text": "12"
+      }
+    },
+    {
+      "id": "step-6",
+      "type": "element.click",
+      "input": {
+        "locator": {
+          "type": "id",
+          "value": "practice-save-button"
+        }
+      }
+    },
+    {
+      "id": "step-7",
+      "type": "wait.for",
+      "input": {
+        "condition": {
+          "kind": "element_visible",
+          "locator": {
+            "type": "text",
+            "value": "Practice save state: saved"
+          },
+          "timeoutMs": 3000
+        }
+      }
+    },
+    {
+      "id": "step-8",
+      "type": "assert.elementText",
+      "input": {
+        "locator": {
+          "type": "id",
+          "value": "practice-total-text"
+        },
+        "expectedText": "Practice total: 12"
+      }
+    },
+    {
+      "id": "step-9",
+      "type": "session.close",
+      "input": {}
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "appid": "touristappid",
+  "projectname": "miniprogram-minium-cli-demo",
+  "compileType": "miniprogram",
+  "miniprogramRoot": "dist/",
+  "srcMiniprogramRoot": "src/",
+  "setting": {
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": true,
+    "minifyWXML": true
+  },
+  "libVersion": "3.0.0"
+}

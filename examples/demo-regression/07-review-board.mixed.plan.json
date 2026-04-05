@@ -1,0 +1,174 @@
+{
+  "version": 1,
+  "kind": "miniapp-test-plan",
+  "metadata": {
+    "name": "demo-review-board-mixed",
+    "draft": false
+  },
+  "environment": {
+    "projectPath": "../demo-miniapp",
+    "wechatDevtoolPath": null,
+    "testPort": 9420,
+    "language": "en-US",
+    "runtimeMode": "auto"
+  },
+  "execution": {
+    "mode": "serial",
+    "failFast": true
+  },
+  "steps": [
+    {
+      "id": "step-1",
+      "type": "session.start",
+      "input": {
+        "projectPath": "../demo-miniapp",
+        "initialPagePath": "/pages/review-board/index"
+      }
+    },
+    {
+      "id": "step-2",
+      "type": "assert.elementText",
+      "input": {
+        "locator": {
+          "type": "id",
+          "value": "review-board-title"
+        },
+        "expectedText": "Review Board"
+      }
+    },
+    {
+      "id": "step-3",
+      "type": "element.query",
+      "input": {
+        "locator": {
+          "type": "text",
+          "value": "two fingers"
+        }
+      }
+    },
+    {
+      "id": "step-4",
+      "type": "element.click",
+      "input": {
+        "locator": {
+          "type": "id",
+          "value": "review-filter-toggle-button"
+        }
+      }
+    },
+    {
+      "id": "step-5",
+      "type": "assert.elementText",
+      "input": {
+        "locator": {
+          "type": "id",
+          "value": "review-filter-mode-text"
+        },
+        "expectedText": "Marker filter: latest"
+      }
+    },
+    {
+      "id": "step-6",
+      "type": "assert.elementText",
+      "input": {
+        "locator": {
+          "type": "id",
+          "value": "review-reference-card-title"
+        },
+        "expectedText": "Reference Beacon"
+      }
+    },
+    {
+      "id": "step-7",
+      "type": "artifact.screenshot",
+      "input": {
+        "prefix": "review-before-zoom"
+      }
+    },
+    {
+      "id": "step-8",
+      "type": "gesture.touchStart",
+      "input": {
+        "pointerId": 0,
+        "locator": {
+          "type": "id",
+          "value": "review-board-target"
+        },
+        "x": 150,
+        "y": 220
+      }
+    },
+    {
+      "id": "step-9",
+      "type": "gesture.touchStart",
+      "input": {
+        "pointerId": 1,
+        "locator": {
+          "type": "id",
+          "value": "review-board-target"
+        },
+        "x": 240,
+        "y": 305
+      }
+    },
+    {
+      "id": "step-10",
+      "type": "gesture.touchMove",
+      "input": {
+        "pointerId": 0,
+        "locator": {
+          "type": "id",
+          "value": "review-board-target"
+        },
+        "x": 105,
+        "y": 175
+      }
+    },
+    {
+      "id": "step-11",
+      "type": "gesture.touchMove",
+      "input": {
+        "pointerId": 1,
+        "locator": {
+          "type": "id",
+          "value": "review-board-target"
+        },
+        "x": 295,
+        "y": 360
+      }
+    },
+    {
+      "id": "step-12",
+      "type": "assert.elementText",
+      "input": {
+        "locator": {
+          "type": "id",
+          "value": "review-status-text"
+        },
+        "expectedText": "Review status: two-finger-pan-zoom"
+      }
+    },
+    {
+      "id": "step-13",
+      "type": "assert.elementVisible",
+      "input": {
+        "locator": {
+          "type": "text",
+          "value": "Review scale: 2."
+        }
+      }
+    },
+    {
+      "id": "step-14",
+      "type": "artifact.screenshot",
+      "input": {
+        "prefix": "review-after-zoom"
+      }
+    },
+    {
+      "id": "step-15",
+      "type": "session.close",
+      "input": {}
+    }
+  ]
+}

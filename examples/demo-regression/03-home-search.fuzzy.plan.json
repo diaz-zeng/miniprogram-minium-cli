@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "kind": "miniapp-test-plan",
+  "metadata": {
+    "name": "demo-home-search-fuzzy",
+    "draft": false
+  },
+  "environment": {
+    "projectPath": "../demo-miniapp",
+    "wechatDevtoolPath": null,
+    "testPort": 9420,
+    "language": "en-US",
+    "runtimeMode": "auto"
+  },
+  "execution": {
+    "mode": "serial",
+    "failFast": true
+  },
+  "steps": [
+    {
+      "id": "step-1",
+      "type": "session.start",
+      "input": {
+        "projectPath": "../demo-miniapp",
+        "initialPagePath": "/pages/home/index"
+      }
+    },
+    {
+      "id": "step-2",
+      "type": "element.input",
+      "input": {
+        "locator": {
+          "type": "id",
+          "value": "search-input"
+        },
+        "text": "marker"
+      }
+    },
+    {
+      "id": "step-3",
+      "type": "wait.for",
+      "input": {
+        "condition": {
+          "kind": "element_visible",
+          "locator": {
+            "type": "text",
+            "value": "Search keyword: marker"
+          },
+          "timeoutMs": 1500
+        }
+      }
+    },
+    {
+      "id": "step-4",
+      "type": "element.query",
+      "input": {
+        "locator": {
+          "type": "text",
+          "value": "Search keyword"
+        }
+      }
+    },
+    {
+      "id": "step-5",
+      "type": "assert.elementText",
+      "input": {
+        "locator": {
+          "type": "id",
+          "value": "search-value-text"
+        },
+        "expectedText": "Search keyword: marker"
+      }
+    },
+    {
+      "id": "step-6",
+      "type": "session.close",
+      "input": {}
+    }
+  ]
+}

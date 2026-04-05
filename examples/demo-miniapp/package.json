@@ -1,0 +1,32 @@
+{
+  "name": "miniprogram-minium-cli-demo-miniapp",
+  "private": true,
+  "version": "0.1.0",
+  "description": "TaroJS demo miniapp for miniprogram-minium-cli verification",
+  "scripts": {
+    "dev:weapp": "taro build --type weapp --watch",
+    "build:weapp": "taro build --type weapp"
+  },
+  "dependencies": {
+    "@babel/runtime": "^7.27.0",
+    "@tarojs/components": "4.1.11",
+    "@tarojs/react": "4.1.11",
+    "@tarojs/runtime": "4.1.11",
+    "@tarojs/shared": "4.1.11",
+    "@tarojs/taro": "4.1.11",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.27.1",
+    "@babel/preset-react": "^7.27.1",
+    "@tarojs/cli": "4.1.11",
+    "@tarojs/plugin-framework-react": "4.1.11",
+    "@tarojs/plugin-platform-weapp": "4.1.11",
+    "@tarojs/service": "4.1.11",
+    "@tarojs/webpack5-runner": "4.1.11",
+    "@types/react": "^18.3.12",
+    "babel-preset-taro": "4.1.11",
+    "typescript": "^5.8.3"
+  }
+}

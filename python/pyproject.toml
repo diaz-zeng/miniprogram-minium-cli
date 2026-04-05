@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "miniprogram-minium-cli-runtime"
+version = "0.1.0"
+description = "Python runtime for miniprogram-minium-cli"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+  { name = "diaz-zeng", email = "diaz_zeng@outlook.com" },
+]
+dependencies = [
+  "minium>=1.6.0,<2.0.0",
+]
+
+[project.scripts]
+miniprogram-minium-cli-runtime = "miniprogram_minium_cli.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["miniprogram_minium_cli"]
