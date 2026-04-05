@@ -1,5 +1,10 @@
 # miniprogram-minium-cli
 
+[![npm version](https://img.shields.io/npm/v/miniprogram-minium-cli)](https://www.npmjs.com/package/miniprogram-minium-cli)
+[![npm downloads](https://img.shields.io/npm/dm/miniprogram-minium-cli)](https://www.npmjs.com/package/miniprogram-minium-cli)
+[![GitHub last commit](https://img.shields.io/github/last-commit/diaz-zeng/miniprogram-minium-cli)](https://github.com/diaz-zeng/miniprogram-minium-cli)
+[![GitHub license](https://img.shields.io/github/license/diaz-zeng/miniprogram-minium-cli)](https://github.com/diaz-zeng/miniprogram-minium-cli/blob/main/LICENSE)
+
 [English](../README.md)
 
 `miniprogram-minium-cli` 是一个用于执行结构化小程序自动化计划的命令行产品。
@@ -213,3 +218,7 @@ miniprogram-minium-cli prepare-runtime [--json]
 ## 许可证
 
 MIT。详见 [LICENSE](../LICENSE)。
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=diaz-zeng/miniprogram-minium-cli&type=Date)](https://www.star-history.com/#diaz-zeng/miniprogram-minium-cli&Date)
