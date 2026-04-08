@@ -174,8 +174,11 @@ test("main installs bundled skills into a custom path", async () => {
     assert.equal(parsed.targetRoot, targetRoot);
     assert.ok(Array.isArray(parsed.installed));
     assert.ok(parsed.installed.some((entry: { name: string }) => entry.name === "miniprogram-minium-cli"));
+    assert.ok(parsed.installed.some((entry: { name: string }) => entry.name === "interactive-classname-tagging"));
     await fs.access(path.join(targetRoot, "miniprogram-minium-cli", "SKILL.md"));
     await fs.access(path.join(targetRoot, "miniprogram-minium-cli", "references", "execution.md"));
+    await fs.access(path.join(targetRoot, "interactive-classname-tagging", "SKILL.md"));
+    await fs.access(path.join(targetRoot, "interactive-classname-tagging", "references", "naming-convention.md"));
   } finally {
     await fs.rm(targetRoot, { recursive: true, force: true });
   }
@@ -195,6 +198,7 @@ test("installBundledSkills defaults into .agents/skills under cwd", async () => 
 
     assert.equal(result.targetRoot, path.resolve(cwd, ".agents", "skills"));
     await fs.access(path.join(result.targetRoot, "miniprogram-minium-cli", "SKILL.md"));
+    await fs.access(path.join(result.targetRoot, "interactive-classname-tagging", "SKILL.md"));
   } finally {
     await fs.rm(cwd, { recursive: true, force: true });
   }

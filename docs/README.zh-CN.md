@@ -73,13 +73,13 @@ npm install -g miniprogram-minium-cli
 
 CLI 会按需准备并复用自己的私有 `uv` 托管 Python 运行时。用户不需要为这个工具单独维护全局 Python 环境。
 
-将随包 skill 安装到默认本地 skills 目录：
+将随包 skills 安装到默认本地 skills 目录：
 
 ```bash
 miniprogram-minium-cli install --skills
 ```
 
-当包已经在本地可用时，可以通过 `npx` 安装随包 skill：
+当包已经在本地可用时，可以通过 `npx` 安装随包 skills：
 
 ```bash
 npx --no-install miniprogram-minium-cli install --skills
@@ -112,6 +112,19 @@ miniprogram-minium-cli install --skills --path /path/to/skills
 默认情况下，该命令会安装到当前执行目录下的 `./.agents/skills`。如果你要给 Claude Code、GitHub Copilot 或其他 coding agent 使用，请通过 `--path` 指向对应 agent 的本地或全局 skills 目录。
 
 如果对应 agent 已经支持开放的 `skills` 生态，也可以直接执行 `npx skills add diaz-zeng/miniprogram-minium-cli --skill miniprogram-minium-cli` 从仓库安装。
+
+## 随包 Skills
+
+当前仓库随包提供以下 skills：
+
+- `miniprogram-minium-cli`：面向运行时准备、plan 编写、执行、skill 安装和结果分析的产品使用指导
+- `interactive-classname-tagging`：面向开发阶段的交互元素专用打标指导，要求显式使用 `minium-anchor-<4hex>` 标识
+
+如果要通过开放的 `skills` 工具单独安装这个新 skill，可以执行：
+
+```bash
+npx skills add diaz-zeng/miniprogram-minium-cli --skill interactive-classname-tagging
+```
 
 ## 快速开始
 

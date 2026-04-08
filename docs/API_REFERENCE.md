@@ -184,7 +184,7 @@ miniprogram-minium-cli install --skills [--path <path>] [--json]
 
 - `--skills`
 
-The current install workflow is explicitly scoped to bundled skill installation.
+The current install workflow is explicitly scoped to bundled skills installation.
 
 ### Options
 
@@ -225,10 +225,11 @@ npx --no-install miniprogram-minium-cli install --skills
 npx miniprogram-minium-cli install --skills
 ```
 
-The repository skill can also be installed through the open `skills` tool:
+The repository skills can also be installed individually through the open `skills` tool:
 
 ```bash
 npx skills add diaz-zeng/miniprogram-minium-cli --skill miniprogram-minium-cli
+npx skills add diaz-zeng/miniprogram-minium-cli --skill interactive-classname-tagging
 ```
 
 ## `help`

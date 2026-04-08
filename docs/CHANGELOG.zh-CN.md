@@ -8,6 +8,18 @@
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-04-08
+
+### Added
+
+- 在 `skills/interactive-classname-tagging/` 下新增一个由仓库维护的一方 skill，用于开发阶段的交互元素自动化专用打标。
+- 新增专用打标规范，要求目标交互元素显式使用 `minium-anchor-<4hex>`，而不是依赖业务类名或布局类名。
+
+### Changed
+
+- 随包 skills 的相关文档已更新为同时描述两个仓库 skill，以及它们通过 `install --skills` 和开放 `skills` 工具的安装方式。
+- 随包 skill 安装测试已补充校验，确保 `interactive-classname-tagging` 会与 `miniprogram-minium-cli` 一起被打包并安装。
+
 ## [1.0.0] - 2026-04-05
 
 ### Added
