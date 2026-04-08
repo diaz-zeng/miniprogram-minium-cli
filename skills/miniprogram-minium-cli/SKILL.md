@@ -1,6 +1,6 @@
 ---
 name: miniprogram-minium-cli
-description: Use when working with miniprogram-minium-cli to prepare the managed runtime, author or validate structured miniapp plans, execute plans, install the bundled skill with `miniprogram-minium-cli install --skills`, or analyze run artifacts such as summary.json, result.json, comparison.json, and screenshots.
+description: Use when working with miniprogram-minium-cli to prepare the managed runtime, author or validate structured miniapp plans, execute plans, install the bundled skills with `miniprogram-minium-cli install --skills`, or analyze run artifacts such as summary.json, result.json, comparison.json, and screenshots.
 ---
 
 # miniprogram-minium-cli Skill
@@ -13,7 +13,7 @@ Use this skill as the single entry point for product usage of `miniprogram-miniu
 # warm up the managed runtime
 miniprogram-minium-cli prepare-runtime
 
-# install the bundled skill into the local .agents skills directory
+# install the bundled skills into the local .agents skills directory
 miniprogram-minium-cli install --skills
 
 # install through npx when the package is local
@@ -22,7 +22,7 @@ npx --no-install miniprogram-minium-cli install --skills
 # install through npx without a prior global install
 npx miniprogram-minium-cli install --skills
 
-# install through the open skills tool from this repository
+# install this specific skill through the open skills tool from this repository
 npx skills add diaz-zeng/miniprogram-minium-cli --skill miniprogram-minium-cli
 
 # execute a plan file
@@ -91,8 +91,10 @@ If the package is not installed yet, install it first:
 npm install -g miniprogram-minium-cli
 ```
 
-By default, `install --skills` writes to `./.agents/skills` under the current working directory. Use `--path` when you want a shared global directory or an agent-specific local skills directory.
+By default, `install --skills` writes all bundled skills to `./.agents/skills` under the current working directory. Use `--path` when you want a shared global directory or an agent-specific local skills directory.
 
 If you want to avoid a global install, use `npx miniprogram-minium-cli ...` instead.
 
 If the agent supports the open `skills` ecosystem, you can also install this skill directly from the repository with `npx skills add diaz-zeng/miniprogram-minium-cli --skill miniprogram-minium-cli`.
+
+The same repository also exposes `interactive-classname-tagging` for development-time interactive marker guidance.

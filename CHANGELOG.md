@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-04-08
+
+### Added
+
+- A first-party repository skill under `skills/interactive-classname-tagging/` for development-time interactive automation markers.
+- Dedicated marker guidance that requires `minium-anchor-<4hex>` on target interactive elements instead of relying on business or layout classes.
+
+### Changed
+
+- The bundled skills documentation now describes both repository skills and their install paths through `install --skills` and the open `skills` tool.
+- Bundled skill installation tests now verify that `interactive-classname-tagging` is packaged and installed together with `miniprogram-minium-cli`.
+
 ## [1.0.0] - 2026-04-05
 
 ### Added

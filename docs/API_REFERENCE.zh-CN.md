@@ -184,7 +184,7 @@ miniprogram-minium-cli install --skills [--path <path>] [--json]
 
 - `--skills`
 
-当前安装流程明确只覆盖 bundled skill 的安装。
+当前安装流程明确只覆盖 bundled skills 的安装。
 
 ### 参数
 
@@ -225,10 +225,11 @@ npx --no-install miniprogram-minium-cli install --skills
 npx miniprogram-minium-cli install --skills
 ```
 
-这个仓库里的 skill 也可以通过开放的 `skills` 工具安装：
+这个仓库里的 skills 也可以通过开放的 `skills` 工具按单个 skill 安装：
 
 ```bash
 npx skills add diaz-zeng/miniprogram-minium-cli --skill miniprogram-minium-cli
+npx skills add diaz-zeng/miniprogram-minium-cli --skill interactive-classname-tagging
 ```
 
 ## `help`

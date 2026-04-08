@@ -1,6 +1,6 @@
-# Installing the Bundled Skill
+# Installing the Bundled Skills
 
-Use this reference when the task is to install the repository-bundled skill into a local skills directory for Claude Code, GitHub Copilot, Codex, or another coding agent.
+Use this reference when the task is to install the repository-bundled skills into a local skills directory for Claude Code, GitHub Copilot, Codex, or another coding agent.
 
 ## Default installation
 
@@ -20,7 +20,7 @@ If you want to install via `npx` without a prior global install, use:
 npx miniprogram-minium-cli install --skills
 ```
 
-If your agent supports the open `skills` ecosystem, install directly from this repository:
+If your agent supports the open `skills` ecosystem, install the main product-use skill directly from this repository:
 
 ```bash
 npx skills add diaz-zeng/miniprogram-minium-cli --skill miniprogram-minium-cli
@@ -35,6 +35,11 @@ npx skills add diaz-zeng/miniprogram-minium-cli --list
 This installs every bundled skill from the package into:
 
 - `./.agents/skills` under the current working directory
+
+The bundled set currently includes:
+
+- `miniprogram-minium-cli`
+- `interactive-classname-tagging`
 
 ## Custom installation root
 
@@ -57,8 +62,8 @@ Use JSON mode when another agent or script needs the installed paths.
 ## Notes
 
 - The command installs packaged skill assets; it does not generate new skills.
-- Re-running the command refreshes the installed bundled skill content at the target location.
-- The open `skills` tool installs from the repository layout under `skills/`, so `skills/miniprogram-minium-cli/` is the compatibility anchor for non-tool-specific agents.
+- Re-running the command refreshes the installed bundled skills at the target location.
+- The open `skills` tool installs from the repository layout under `skills/`, so each skill can also be installed individually, including `interactive-classname-tagging`.
 
 ## Command availability
 

@@ -73,13 +73,13 @@ Host requirement:
 
 The CLI prepares and reuses its own private `uv`-managed Python runtime on demand. It does not require the user to install or manage a global Python environment for this tool.
 
-Install the bundled skill into the default local skills directory:
+Install the bundled skills into the default local skills directory:
 
 ```bash
 miniprogram-minium-cli install --skills
 ```
 
-Install the bundled skill through `npx` when the package is available locally:
+Install the bundled skills through `npx` when the package is available locally:
 
 ```bash
 npx --no-install miniprogram-minium-cli install --skills
@@ -112,6 +112,19 @@ miniprogram-minium-cli install --skills --path /path/to/skills
 By default, the command installs into `./.agents/skills` under the current working directory. For Claude Code, GitHub Copilot, and other coding agents, use `--path` to target an agent-specific local or global skills directory.
 
 If your agent already supports the open `skills` ecosystem, you can also install from the repository with `npx skills add diaz-zeng/miniprogram-minium-cli --skill miniprogram-minium-cli`.
+
+## Bundled Skills
+
+The repository currently bundles these skills:
+
+- `miniprogram-minium-cli`: product-use guidance for runtime setup, plan authoring, execution, skill installation, and run analysis
+- `interactive-classname-tagging`: development-time guidance for explicit `minium-anchor-<4hex>` markers on interactive miniapp elements
+
+Install a specific repository skill through the open `skills` tool:
+
+```bash
+npx skills add diaz-zeng/miniprogram-minium-cli --skill interactive-classname-tagging
+```
 
 ## Quick Start
 
@@ -213,7 +226,7 @@ miniprogram-minium-cli install --skills [--path <path>] [--json]
 
 Purpose:
 
-- install the bundled `miniprogram-minium-cli` skill into `./.agents/skills` under the current working directory, or a custom skills root for other coding agents
+- install all bundled repository skills into `./.agents/skills` under the current working directory, or a custom skills root for other coding agents
 
 Primary options:
 
