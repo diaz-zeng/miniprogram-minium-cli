@@ -449,6 +449,45 @@ draft plan 作为数据是合法的，但 `exec` 只接受 `metadata.draft = fal
 - `gesture.touchMove`
 - `gesture.touchTap`
 - `gesture.touchEnd`
+- `storage.set`
+- `storage.get`
+- `storage.info`
+- `storage.remove`
+- `storage.clear`
+- `navigation.navigateTo`
+- `navigation.redirectTo`
+- `navigation.reLaunch`
+- `navigation.switchTab`
+- `navigation.back`
+- `app.getLaunchOptions`
+- `app.getSystemInfo`
+- `app.getAccountInfo`
+- `settings.get`
+- `settings.authorize`
+- `settings.open`
+- `clipboard.set`
+- `clipboard.get`
+- `ui.showToast`
+- `ui.hideToast`
+- `ui.showLoading`
+- `ui.hideLoading`
+- `ui.showModal`
+- `ui.showActionSheet`
+- `location.get`
+- `location.choose`
+- `location.open`
+- `media.chooseImage`
+- `media.chooseMedia`
+- `media.takePhoto`
+- `media.getImageInfo`
+- `media.saveImageToPhotosAlbum`
+- `file.upload`
+- `file.download`
+- `device.scanCode`
+- `device.makePhoneCall`
+- `auth.login`
+- `auth.checkSession`
+- `subscription.requestMessage`
 - `artifact.screenshot`
 - `session.close`
 
@@ -479,6 +518,18 @@ draft plan 作为数据是合法的，但 `exec` 只接受 `metadata.draft = fal
 - `id`
 - `text`
 - `textContains`
+
+## Bridge 通用输入字段
+
+bridge 类步骤可以额外携带以下公共可选字段：
+
+- `requiresDeveloperAppId`: boolean
+  - 用来标记该步骤需要开发者自有 AppID。
+  - 当目标项目使用 `touristappid` 时，执行器会跳过该步骤，而不是把它计为产品失败。
+- `skipReason`: string
+  - 可选的人类可读跳过原因，会记录到 skipped step 输出中。
+- `timeoutMs`: number
+  - bridge 动作支持等待或异步完成时，可用来覆盖默认超时。
 
 ## Step 说明
 
@@ -614,6 +665,148 @@ draft plan 作为数据是合法的，但 `exec` 只接受 `metadata.draft = fal
 
 - 无
 
+### Bridge 存储步骤
+
+支持的步骤：
+
+- `storage.set`
+- `storage.get`
+- `storage.info`
+- `storage.remove`
+- `storage.clear`
+
+关键输入规则：
+
+- `storage.set` 需要 `key` 和 `value`
+- `storage.get` 与 `storage.remove` 需要 `key`
+- `storage.info` 与 `storage.clear` 不要求额外字段
+
+结果形状：
+
+- 在 `result` 下返回可序列化的存储值或存储摘要
+
+### Bridge 路由步骤
+
+支持的步骤：
+
+- `navigation.navigateTo`
+- `navigation.redirectTo`
+- `navigation.reLaunch`
+- `navigation.switchTab`
+- `navigation.back`
+
+关键输入规则：
+
+- `navigateTo`、`redirectTo`、`reLaunch`、`switchTab` 需要 `url`
+- `navigation.back` 接受可选的 `delta`
+
+结果形状：
+
+- 返回更新后的 `current_page_path`
+- bridge 结果元数据里可能包含解析后的 `pagePath` 和路由参数
+
+### Bridge 应用上下文步骤
+
+支持的步骤：
+
+- `app.getLaunchOptions`
+- `app.getSystemInfo`
+- `app.getAccountInfo`
+
+关键输入规则：
+
+- 不要求额外字段
+
+结果形状：
+
+- 在 `result` 下返回可序列化的启动参数、系统信息或账号信息
+
+### Bridge 设置与剪贴板步骤
+
+支持的步骤：
+
+- `settings.get`
+- `settings.authorize`
+- `settings.open`
+- `clipboard.set`
+- `clipboard.get`
+
+关键输入规则：
+
+- `settings.authorize` 需要 `scope`
+- `clipboard.set` 需要 `text`
+
+结果形状：
+
+- 在 `result` 下返回结构化的设置、授权或剪贴板结果
+
+### Bridge 反馈 UI 步骤
+
+支持的步骤：
+
+- `ui.showToast`
+- `ui.hideToast`
+- `ui.showLoading`
+- `ui.hideLoading`
+- `ui.showModal`
+- `ui.showActionSheet`
+
+关键输入规则：
+
+- `ui.showToast` 需要 `title`
+- `ui.showLoading` 需要 `title`
+- `ui.showModal` 需要 `title` 和 `content`
+- `ui.showActionSheet` 需要非空 `itemList`
+
+结果形状：
+
+- 返回结构化的反馈 UI 摘要，例如标题、选择结果或当前 UI 状态
+
+### Bridge 位置、媒体、文件、设备、鉴权与订阅步骤
+
+支持的步骤：
+
+- `location.get`
+- `location.choose`
+- `location.open`
+- `media.chooseImage`
+- `media.chooseMedia`
+- `media.takePhoto`
+- `media.getImageInfo`
+- `media.saveImageToPhotosAlbum`
+- `file.upload`
+- `file.download`
+- `device.scanCode`
+- `device.makePhoneCall`
+- `auth.login`
+- `auth.checkSession`
+- `subscription.requestMessage`
+
+关键输入规则：
+
+- `location.open` 需要 `latitude` 和 `longitude`
+- `media.getImageInfo` 需要 `src`
+- `media.saveImageToPhotosAlbum` 需要 `filePath`
+- `file.upload` 需要 `url`、`filePath` 和 `name`
+- `file.download` 需要 `url`
+- `device.makePhoneCall` 需要 `phoneNumber`
+- `subscription.requestMessage` 需要非空 `tmplIds`
+
+结果形状：
+
+- 在 `result` 下返回可序列化 bridge 结果
+- 异步能力要么收敛为最终结构化结果，要么返回 `ACTION_ERROR`
+
+### `touristappid` 下的 Bridge 跳过语义
+
+当某个 bridge 步骤显式设置 `requiresDeveloperAppId: true`，或者属于内置受限步骤集合时，执行器会读取目标项目的 `project.config.json`。
+
+如果项目 AppID 是 `touristappid`：
+
+- 该步骤结果会使用 `status: "skipped"`
+- 输出中会包含 `skip_reason`
+- 执行摘要会记录该 skipped step，而不是把它算作失败
+
 ## 最小可执行计划
 
 ```json
@@ -665,5 +858,6 @@ CLI 会在以下情况下拒绝执行：
 - `environment.autoScreenshot` 不是 `off`、`on-success` 或 `always`
 - 可执行 plan 的 `steps` 缺失或为空
 - 存在不支持的 step type
-- 某个 step 缺少 `locator`、`pointerId`、`expectedPath` 或 `expectedText` 等必填字段
+- 某个 step 缺少 `locator`、`pointerId`、`expectedPath`、`expectedText`、`key`、`url` 或 `tmplIds` 等必填字段
+- bridge 步骤使用了不支持的参数形状
 - plan 在 `exec` 时仍被标记为 draft

@@ -40,6 +40,31 @@ Typical coverage:
 - `assert.elementVisible`
 - mixed exact and fuzzy selectors
 
+### Bridge Lab Page
+
+Source: `src/pages/bridge-lab/index.tsx`
+
+Purpose:
+
+- provide a stable landing page for bridge-backed regression plans
+- document which bundled plans cover high-priority, medium-priority, and AppID-restricted bridge actions
+- expose a visible `touristappid` note so skip-oriented plans have an explicit page anchor
+
+Typical coverage:
+
+- `storage.*`
+- `navigation.*`
+- `app.*`
+- `settings.*`
+- `clipboard.*`
+- `ui.*`
+- `location.*`
+- `media.*`
+- `file.*`
+- `device.*`
+- `auth.*`
+- `subscription.requestMessage`
+
 ### Gesture Page
 
 Source: `src/pages/gesture/index.tsx`
@@ -100,3 +125,9 @@ The regression set intentionally mixes two styles:
 - fuzzy or mixed plans: optimized for model-friendly prompts and more realistic user-facing text lookup
 
 Use exact plans when you want a low-noise baseline. Use fuzzy or mixed plans when you want to validate the CLI's higher-level locator behavior.
+
+Bridge-focused plans add one more split:
+
+- default bridge plans: use `runtimeMode: "auto"` and focus on bridge actions that should remain usable in the demo miniapp
+- placeholder bridge plans: use `runtimeMode: "placeholder"` for APIs that depend on camera access, upload domains, device containers, or other external conditions
+- restricted bridge plans: keep `runtimeMode: "auto"` but mark steps with `requiresDeveloperAppId` so the engine skips them under `touristappid`

@@ -93,6 +93,12 @@ export default function HomePage() {
 
       <View id="navigation-card" style={cardStyle}>
         <Text id="navigation-card-title">Navigation Playground</Text>
+        <Button
+          id="home-to-bridge-lab-button"
+          onClick={() => void Taro.navigateTo({ url: "/pages/bridge-lab/index" })}
+        >
+          Open the bridge lab
+        </Button>
         <Button id="home-to-gesture-button" onClick={() => void Taro.navigateTo({ url: "/pages/gesture/index" })}>
           Open the gesture lab
         </Button>

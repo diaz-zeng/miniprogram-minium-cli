@@ -449,6 +449,45 @@ The CLI currently supports these step types:
 - `gesture.touchMove`
 - `gesture.touchTap`
 - `gesture.touchEnd`
+- `storage.set`
+- `storage.get`
+- `storage.info`
+- `storage.remove`
+- `storage.clear`
+- `navigation.navigateTo`
+- `navigation.redirectTo`
+- `navigation.reLaunch`
+- `navigation.switchTab`
+- `navigation.back`
+- `app.getLaunchOptions`
+- `app.getSystemInfo`
+- `app.getAccountInfo`
+- `settings.get`
+- `settings.authorize`
+- `settings.open`
+- `clipboard.set`
+- `clipboard.get`
+- `ui.showToast`
+- `ui.hideToast`
+- `ui.showLoading`
+- `ui.hideLoading`
+- `ui.showModal`
+- `ui.showActionSheet`
+- `location.get`
+- `location.choose`
+- `location.open`
+- `media.chooseImage`
+- `media.chooseMedia`
+- `media.takePhoto`
+- `media.getImageInfo`
+- `media.saveImageToPhotosAlbum`
+- `file.upload`
+- `file.download`
+- `device.scanCode`
+- `device.makePhoneCall`
+- `auth.login`
+- `auth.checkSession`
+- `subscription.requestMessage`
 - `artifact.screenshot`
 - `session.close`
 
@@ -479,6 +518,18 @@ The exact matching behavior depends on the active runtime backend, but the recom
 - `id`
 - `text`
 - `textContains`
+
+## Bridge Step Common Fields
+
+Bridge-backed steps may include these shared optional input fields:
+
+- `requiresDeveloperAppId`: boolean
+  - Marks the step as restricted to developer-owned AppIDs.
+  - When the target project uses `touristappid`, the engine skips the step instead of reporting a product failure.
+- `skipReason`: string
+  - Optional human-readable reason recorded in the skipped step output.
+- `timeoutMs`: number
+  - Optional timeout override for bridge actions that support waiting or asynchronous completion.
 
 ## Step Reference
 
@@ -614,6 +665,148 @@ Required input:
 
 - none
 
+### Bridge Storage Steps
+
+Supported steps:
+
+- `storage.set`
+- `storage.get`
+- `storage.info`
+- `storage.remove`
+- `storage.clear`
+
+Key input rules:
+
+- `storage.set` requires `key` and `value`
+- `storage.get` and `storage.remove` require `key`
+- `storage.info` and `storage.clear` require no additional fields
+
+Result shape:
+
+- returns a structured `result` payload with serializable storage metadata or values
+
+### Bridge Navigation Steps
+
+Supported steps:
+
+- `navigation.navigateTo`
+- `navigation.redirectTo`
+- `navigation.reLaunch`
+- `navigation.switchTab`
+- `navigation.back`
+
+Key input rules:
+
+- `navigateTo`, `redirectTo`, `reLaunch`, and `switchTab` require `url`
+- `navigation.back` accepts optional `delta`
+
+Result shape:
+
+- returns an updated `current_page_path`
+- bridge result metadata may include the resolved `pagePath` and navigation arguments
+
+### Bridge App Context Steps
+
+Supported steps:
+
+- `app.getLaunchOptions`
+- `app.getSystemInfo`
+- `app.getAccountInfo`
+
+Key input rules:
+
+- no additional required fields
+
+Result shape:
+
+- returns serializable launch, system, or account context under `result`
+
+### Bridge Settings And Clipboard Steps
+
+Supported steps:
+
+- `settings.get`
+- `settings.authorize`
+- `settings.open`
+- `clipboard.set`
+- `clipboard.get`
+
+Key input rules:
+
+- `settings.authorize` requires `scope`
+- `clipboard.set` requires `text`
+
+Result shape:
+
+- returns structured settings, authorization, or clipboard payloads under `result`
+
+### Bridge Feedback UI Steps
+
+Supported steps:
+
+- `ui.showToast`
+- `ui.hideToast`
+- `ui.showLoading`
+- `ui.hideLoading`
+- `ui.showModal`
+- `ui.showActionSheet`
+
+Key input rules:
+
+- `ui.showToast` requires `title`
+- `ui.showLoading` requires `title`
+- `ui.showModal` requires `title` and `content`
+- `ui.showActionSheet` requires a non-empty `itemList`
+
+Result shape:
+
+- returns structured feedback UI metadata such as displayed titles, selected index, or UI state summary
+
+### Bridge Location, Media, File, Device, Auth, And Subscription Steps
+
+Supported steps:
+
+- `location.get`
+- `location.choose`
+- `location.open`
+- `media.chooseImage`
+- `media.chooseMedia`
+- `media.takePhoto`
+- `media.getImageInfo`
+- `media.saveImageToPhotosAlbum`
+- `file.upload`
+- `file.download`
+- `device.scanCode`
+- `device.makePhoneCall`
+- `auth.login`
+- `auth.checkSession`
+- `subscription.requestMessage`
+
+Key input rules:
+
+- `location.open` requires `latitude` and `longitude`
+- `media.getImageInfo` requires `src`
+- `media.saveImageToPhotosAlbum` requires `filePath`
+- `file.upload` requires `url`, `filePath`, and `name`
+- `file.download` requires `url`
+- `device.makePhoneCall` requires `phoneNumber`
+- `subscription.requestMessage` requires a non-empty `tmplIds`
+
+Result shape:
+
+- returns serializable bridge results under `result`
+- async capabilities either resolve to a final structured payload or fail with `ACTION_ERROR`
+
+### Bridge Skip Semantics Under `touristappid`
+
+When a bridge-backed step explicitly sets `requiresDeveloperAppId: true`, or when the step belongs to the built-in restricted set, the engine checks the target project's `project.config.json`.
+
+If the project AppID is `touristappid`:
+
+- the step result uses `status: "skipped"`
+- the output includes `skip_reason`
+- the execution summary records the skipped step instead of counting it as a failure
+
 ## Minimal Runnable Plan
 
 ```json
@@ -665,5 +858,6 @@ The CLI rejects a plan when:
 - `environment.autoScreenshot` is not one of `off`, `on-success`, or `always`
 - `steps` is missing or empty for a runnable plan
 - a step type is not supported
-- a step misses required fields such as `locator`, `pointerId`, `expectedPath`, or `expectedText`
+- a step misses required fields such as `locator`, `pointerId`, `expectedPath`, `expectedText`, `key`, `url`, or `tmplIds`
+- a bridge-backed step uses unsupported parameter shapes
 - the plan is marked as draft during `exec`

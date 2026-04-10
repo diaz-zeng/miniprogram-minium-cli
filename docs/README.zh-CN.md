@@ -39,9 +39,23 @@
 - 通过 `--plan-json` 执行内联 JSON 计划
 - 精确定位与模糊文本匹配
 - 点击、输入、等待与断言
+- 通过结构化 bridge 步骤调用存储、路由、应用上下文、设置、剪贴板、反馈 UI、定位、媒体、文件、设备、鉴权与订阅等小程序能力
 - 显式截图与自动截图
 - 单指和多指手势
 - 产出 `summary.json`、`result.json`、`comparison.json` 以及截图文件
+
+## Step 分类
+
+自动化 plan 由四类步骤组合而成：
+
+- 会话与产物步骤，例如 `session.start`、`artifact.screenshot`、`session.close`
+- UI 步骤，例如 `element.click`、`element.input`、`page.read`、`wait.for`、`gesture.*`
+- bridge 步骤，例如 `storage.set`、`navigation.navigateTo`、`clipboard.get`、`settings.authorize`、`auth.login`、`location.get`
+- 断言步骤，例如 `assert.pagePath`、`assert.elementText`、`assert.elementVisible`
+
+bridge 步骤通过结构化 step type 暴露一组受控的小程序原生能力，而不是直接透传原始 `wx` 方法调用。
+
+完整的 step 列表和每个 step 的输入字段请查看 [API_REFERENCE.zh-CN.md](./API_REFERENCE.zh-CN.md)。
 
 ## 计划输入
 
@@ -167,6 +181,48 @@ miniprogram-minium-cli exec --plan-json '{
     },
     {
       "id": "step-2",
+      "type": "session.close",
+      "input": {}
+    }
+  ]
+}' --json
+```
+
+执行带 bridge 步骤的内联计划：
+
+```bash
+miniprogram-minium-cli exec --plan-json '{
+  "version": 1,
+  "kind": "miniapp-test-plan",
+  "metadata": { "draft": false, "name": "bridge-inline-demo" },
+  "execution": { "mode": "serial", "failFast": true },
+  "environment": {
+    "projectPath": "./miniapp",
+    "artifactsDir": null,
+    "wechatDevtoolPath": null,
+    "testPort": 9420,
+    "language": "en-US",
+    "runtimeMode": "auto",
+    "autoScreenshot": "off"
+  },
+  "steps": [
+    {
+      "id": "start",
+      "type": "session.start",
+      "input": { "projectPath": "./miniapp" }
+    },
+    {
+      "id": "set-storage",
+      "type": "storage.set",
+      "input": { "key": "demo-key", "value": "demo-value" }
+    },
+    {
+      "id": "get-storage",
+      "type": "storage.get",
+      "input": { "key": "demo-key" }
+    },
+    {
+      "id": "close",
       "type": "session.close",
       "input": {}
     }

@@ -1,0 +1,178 @@
+{
+  "version": 1,
+  "kind": "miniapp-test-plan",
+  "metadata": {
+    "name": "demo-bridge-high-priority-exact",
+    "draft": false
+  },
+  "environment": {
+    "projectPath": "../demo-miniapp",
+    "wechatDevtoolPath": null,
+    "testPort": 9420,
+    "language": "en-US",
+    "runtimeMode": "auto"
+  },
+  "execution": {
+    "mode": "serial",
+    "failFast": true
+  },
+  "steps": [
+    {
+      "id": "step-1",
+      "type": "session.start",
+      "input": {
+        "projectPath": "../demo-miniapp",
+        "initialPagePath": "/pages/bridge-lab/index"
+      }
+    },
+    {
+      "id": "step-2",
+      "type": "assert.pagePath",
+      "input": {
+        "expectedPath": "pages/bridge-lab/index"
+      }
+    },
+    {
+      "id": "step-3",
+      "type": "assert.elementText",
+      "input": {
+        "locator": {
+          "type": "id",
+          "value": "bridge-lab-title"
+        },
+        "expectedText": "Bridge Lab"
+      }
+    },
+    {
+      "id": "step-4",
+      "type": "storage.clear",
+      "input": {}
+    },
+    {
+      "id": "step-5",
+      "type": "storage.set",
+      "input": {
+        "key": "bridge-key",
+        "value": "bridge-value"
+      }
+    },
+    {
+      "id": "step-6",
+      "type": "storage.get",
+      "input": {
+        "key": "bridge-key"
+      }
+    },
+    {
+      "id": "step-7",
+      "type": "storage.info",
+      "input": {}
+    },
+    {
+      "id": "step-8",
+      "type": "storage.remove",
+      "input": {
+        "key": "bridge-key"
+      }
+    },
+    {
+      "id": "step-9",
+      "type": "clipboard.set",
+      "input": {
+        "text": "bridge clipboard"
+      }
+    },
+    {
+      "id": "step-10",
+      "type": "clipboard.get",
+      "input": {}
+    },
+    {
+      "id": "step-11",
+      "type": "settings.get",
+      "input": {}
+    },
+    {
+      "id": "step-12",
+      "type": "ui.showToast",
+      "input": {
+        "title": "Bridge toast",
+        "icon": "none",
+        "duration": 1200
+      }
+    },
+    {
+      "id": "step-13",
+      "type": "ui.hideToast",
+      "input": {}
+    },
+    {
+      "id": "step-14",
+      "type": "ui.showLoading",
+      "input": {
+        "title": "Bridge loading"
+      }
+    },
+    {
+      "id": "step-15",
+      "type": "ui.hideLoading",
+      "input": {}
+    },
+    {
+      "id": "step-16",
+      "type": "app.getLaunchOptions",
+      "input": {}
+    },
+    {
+      "id": "step-17",
+      "type": "app.getSystemInfo",
+      "input": {}
+    },
+    {
+      "id": "step-18",
+      "type": "app.getAccountInfo",
+      "input": {}
+    },
+    {
+      "id": "step-19",
+      "type": "navigation.navigateTo",
+      "input": {
+        "url": "/pages/home/index?from=bridge-high-priority"
+      }
+    },
+    {
+      "id": "step-20",
+      "type": "wait.for",
+      "input": {
+        "condition": {
+          "kind": "page_path_equals",
+          "expectedValue": "pages/home/index",
+          "timeoutMs": 2000
+        }
+      }
+    },
+    {
+      "id": "step-21",
+      "type": "navigation.back",
+      "input": {
+        "delta": 1
+      }
+    },
+    {
+      "id": "step-22",
+      "type": "wait.for",
+      "input": {
+        "condition": {
+          "kind": "page_path_equals",
+          "expectedValue": "pages/bridge-lab/index",
+          "timeoutMs": 2000
+        }
+      }
+    },
+    {
+      "id": "step-23",
+      "type": "session.close",
+      "input": {}
+    }
+  ]
+}

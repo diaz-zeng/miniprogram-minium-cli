@@ -39,9 +39,23 @@ The current product supports:
 - plan execution from inline JSON through `--plan-json`
 - exact selectors and fuzzy text matching
 - clicks, text input, waits, and assertions
+- bridge-backed miniapp actions for storage, navigation, app context, settings, clipboard, feedback UI, location, media, file, device, auth, and subscription flows
 - explicit screenshots and automatic screenshots
 - single-finger and multi-finger gestures
 - structured outputs including `summary.json`, `result.json`, `comparison.json`, and screenshot files
+
+## Step Categories
+
+Automation plans combine four step categories:
+
+- session and artifact steps such as `session.start`, `artifact.screenshot`, and `session.close`
+- UI steps such as `element.click`, `element.input`, `page.read`, `wait.for`, and `gesture.*`
+- bridge-backed steps such as `storage.set`, `navigation.navigateTo`, `clipboard.get`, `settings.authorize`, `auth.login`, and `location.get`
+- assertion steps such as `assert.pagePath`, `assert.elementText`, and `assert.elementVisible`
+
+Bridge-backed steps expose a controlled subset of mini program native capabilities through structured plan types instead of a raw `wx` method passthrough.
+
+For the full step catalog and per-step input fields, see [API_REFERENCE.md](./docs/API_REFERENCE.md).
 
 ## Plan Input
 
@@ -167,6 +181,48 @@ miniprogram-minium-cli exec --plan-json '{
     },
     {
       "id": "step-2",
+      "type": "session.close",
+      "input": {}
+    }
+  ]
+}' --json
+```
+
+Execute a bridge-backed inline plan:
+
+```bash
+miniprogram-minium-cli exec --plan-json '{
+  "version": 1,
+  "kind": "miniapp-test-plan",
+  "metadata": { "draft": false, "name": "bridge-inline-demo" },
+  "execution": { "mode": "serial", "failFast": true },
+  "environment": {
+    "projectPath": "./miniapp",
+    "artifactsDir": null,
+    "wechatDevtoolPath": null,
+    "testPort": 9420,
+    "language": "en-US",
+    "runtimeMode": "auto",
+    "autoScreenshot": "off"
+  },
+  "steps": [
+    {
+      "id": "start",
+      "type": "session.start",
+      "input": { "projectPath": "./miniapp" }
+    },
+    {
+      "id": "set-storage",
+      "type": "storage.set",
+      "input": { "key": "demo-key", "value": "demo-value" }
+    },
+    {
+      "id": "get-storage",
+      "type": "storage.get",
+      "input": { "key": "demo-key" }
+    },
+    {
+      "id": "close",
       "type": "session.close",
       "input": {}
     }

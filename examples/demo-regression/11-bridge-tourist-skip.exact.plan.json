@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "kind": "miniapp-test-plan",
+  "metadata": {
+    "name": "demo-bridge-tourist-skip-exact",
+    "draft": false
+  },
+  "environment": {
+    "projectPath": "../demo-miniapp",
+    "wechatDevtoolPath": null,
+    "testPort": 9420,
+    "language": "en-US",
+    "runtimeMode": "auto"
+  },
+  "execution": {
+    "mode": "serial",
+    "failFast": true
+  },
+  "steps": [
+    {
+      "id": "step-1",
+      "type": "session.start",
+      "input": {
+        "projectPath": "../demo-miniapp",
+        "initialPagePath": "/pages/bridge-lab/index"
+      }
+    },
+    {
+      "id": "step-2",
+      "type": "assert.elementText",
+      "input": {
+        "locator": {
+          "type": "id",
+          "value": "bridge-touristappid-note"
+        },
+        "expectedText": "Plans that require a developer-owned AppID should be skipped automatically when the demo project still uses touristappid."
+      }
+    },
+    {
+      "id": "step-3",
+      "type": "settings.authorize",
+      "input": {
+        "scope": "scope.userLocation",
+        "requiresDeveloperAppId": true,
+        "skipReason": "Authorization flows require a developer-owned AppID."
+      }
+    },
+    {
+      "id": "step-4",
+      "type": "ui.showModal",
+      "input": {
+        "title": "Restricted modal",
+        "content": "This flow should be skipped under touristappid.",
+        "requiresDeveloperAppId": true,
+        "skipReason": "Native modal flows are not stable under touristappid."
+      }
+    },
+    {
+      "id": "step-5",
+      "type": "ui.showActionSheet",
+      "input": {
+        "itemList": [
+          "Confirm",
+          "Cancel"
+        ],
+        "requiresDeveloperAppId": true,
+        "skipReason": "Action sheet flows are not stable under touristappid."
+      }
+    },
+    {
+      "id": "step-6",
+      "type": "location.get",
+      "input": {
+        "type": "gcj02",
+        "requiresDeveloperAppId": true,
+        "skipReason": "Location authorization requires a developer-owned AppID."
+      }
+    },
+    {
+      "id": "step-7",
+      "type": "location.choose",
+      "input": {
+        "requiresDeveloperAppId": true,
+        "skipReason": "Location picker requires a developer-owned AppID."
+      }
+    },
+    {
+      "id": "step-8",
+      "type": "subscription.requestMessage",
+      "input": {
+        "tmplIds": [
+          "tmpl-demo-bridge"
+        ],
+        "requiresDeveloperAppId": true,
+        "skipReason": "Subscription messages require a developer-owned AppID."
+      }
+    },
+    {
+      "id": "step-9",
+      "type": "session.close",
+      "input": {}
+    }
+  ]
+}

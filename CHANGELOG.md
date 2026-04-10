@@ -8,6 +8,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Structured miniapp bridge actions for storage, navigation, app context, settings, clipboard, feedback UI, location, media, file, device, auth, and subscription flows.
+- Bridge-focused demo coverage in `examples/demo-miniapp/src/pages/bridge-lab/` and bundled regression plans `09-bridge-high-priority.exact.plan.json`, `10-bridge-medium.placeholder.plan.json`, and `11-bridge-tourist-skip.exact.plan.json`.
+- Acceptance tracking for `add-miniapp-bridge-actions` through `openspec/changes/add-miniapp-bridge-actions/acceptance-checklist.md`.
+
+### Changed
+
+- Bridge-backed execution now retries real Minium session startup to reduce flaky `session.start` failures during acceptance runs.
+- Real-runtime tap gesture dispatch now triggers page tap state updates more reliably in the gesture demo flows.
+- Placeholder runtime page resolution now normalizes initial page paths before querying demo elements, which keeps placeholder bridge assertions aligned with the bundled plans.
+- The bridge lab tourist AppID note now renders plain `touristappid` text so real-runtime assertions match the bundled regression plans.
+- Completed acceptance verification for all bundled demo regression plans, including a dedicated tourist-AppID validation pass for the restricted bridge skip scenario.
+
 ## [1.1.0] - 2026-04-08
 
 ### Added

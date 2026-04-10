@@ -27,3 +27,4 @@ venv/
 # Project runtime artifacts
 .codex/
 .minium-cli/
+.tmp

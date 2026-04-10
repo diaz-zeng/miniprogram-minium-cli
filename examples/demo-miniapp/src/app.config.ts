@@ -2,6 +2,7 @@ export default defineAppConfig({
   pages: [
     "pages/login/index",
     "pages/home/index",
+    "pages/bridge-lab/index",
     "pages/gesture/index",
     "pages/cursor-lab/index",
     "pages/review-board/index",

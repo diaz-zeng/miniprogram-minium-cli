@@ -173,6 +173,119 @@ test("failed placeholder assertion produces skipped steps and evidence", async (
   assert.ok(fs.existsSync(String(artifacts.comparisonPath)));
 });
 
+test("placeholder bridge actions pass end-to-end and expose structured outputs", async () => {
+  const artifactsDir = createArtifactsDir("minium-cli-bridge");
+  const plan: Plan = {
+    ...createBasePlan(artifactsDir),
+    metadata: {
+      name: "bridge-smoke",
+      draft: false,
+    },
+    steps: [
+      { id: "step-1", type: "session.start", input: { projectPath: "." } },
+      { id: "step-2", type: "storage.set", input: { key: "bridge-key", value: "bridge-value" } },
+      { id: "step-3", type: "storage.get", input: { key: "bridge-key" } },
+      { id: "step-4", type: "clipboard.set", input: { text: "clipboard-demo" } },
+      { id: "step-5", type: "clipboard.get", input: {} },
+      { id: "step-6", type: "navigation.navigateTo", input: { url: "/pages/bridge-lab/index" } },
+      { id: "step-7", type: "app.getLaunchOptions", input: {} },
+      { id: "step-8", type: "session.close", input: {} },
+    ],
+  };
+
+  const execution = await executePlanWithPython(plan);
+  assert.equal(execution.response.ok, true);
+  const result = execution.response.result as Record<string, unknown>;
+  const summary = result.summary as Record<string, unknown>;
+  const stepResults = result.stepResults as Array<Record<string, unknown>>;
+
+  assert.equal(summary.status, "passed");
+  assert.equal(summary.failedCount, 0);
+  assert.equal(summary.skippedCount, 0);
+  assert.equal(stepResults[2]?.status, "passed");
+  assert.equal(
+    (((stepResults[2]?.output as Record<string, unknown>).result as Record<string, unknown>).value),
+    "bridge-value",
+  );
+  assert.equal(
+    (((stepResults[4]?.output as Record<string, unknown>).result as Record<string, unknown>).text),
+    "clipboard-demo",
+  );
+  assert.equal(
+    (((stepResults[5]?.output as Record<string, unknown>).result as Record<string, unknown>).pagePath),
+    "pages/bridge-lab/index",
+  );
+});
+
+test("touristappid restricted bridge actions are skipped with a structured reason", async () => {
+  const workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), "minium-cli-tourist-"));
+  const projectPath = path.join(workspaceDir, "miniapp");
+  const artifactsDir = path.join(workspaceDir, "artifacts");
+
+  fs.mkdirSync(projectPath, { recursive: true });
+  fs.writeFileSync(
+    path.join(projectPath, "project.config.json"),
+    JSON.stringify({ appid: "touristappid" }, null, 2),
+    "utf8",
+  );
+
+  const plan: Plan = {
+    ...createBasePlan(artifactsDir),
+    metadata: {
+      name: "tourist-skip-smoke",
+      draft: false,
+    },
+    environment: {
+      projectPath,
+      artifactsDir,
+      wechatDevtoolPath: null,
+      testPort: 9420,
+      language: "en-US",
+      runtimeMode: "placeholder",
+    },
+    steps: [
+      { id: "step-1", type: "session.start", input: { projectPath } },
+      {
+        id: "step-2",
+        type: "settings.authorize",
+        input: {
+          scope: "scope.userLocation",
+          requiresDeveloperAppId: true,
+          skipReason: "Authorization flows require a developer-owned AppID.",
+        },
+      },
+      {
+        id: "step-3",
+        type: "subscription.requestMessage",
+        input: {
+          tmplIds: ["tmpl-demo"],
+          requiresDeveloperAppId: true,
+        },
+      },
+      { id: "step-4", type: "session.close", input: {} },
+    ],
+  };
+
+  const execution = await executePlanWithPython(plan);
+  assert.equal(execution.response.ok, true);
+  const result = execution.response.result as Record<string, unknown>;
+  const summary = result.summary as Record<string, unknown>;
+  const stepResults = result.stepResults as Array<Record<string, unknown>>;
+  const skipped = summary.skipped as Array<Record<string, unknown>>;
+
+  assert.equal(summary.status, "passed");
+  assert.equal(summary.failedCount, 0);
+  assert.equal(summary.skippedCount, 2);
+  assert.equal(stepResults[1]?.status, "skipped");
+  assert.equal(stepResults[2]?.status, "skipped");
+  assert.equal(
+    (stepResults[1]?.output as Record<string, unknown>).skip_reason,
+    "Authorization flows require a developer-owned AppID.",
+  );
+  assert.equal(Array.isArray(skipped), true);
+  assert.equal(skipped.length, 2);
+});
+
 test("real runtime session preparation launches automation target before attaching", async () => {
   const workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), "minium-cli-real-"));
   const fakeModuleDir = path.join(workspaceDir, "fake-python");

@@ -106,6 +106,40 @@ class ActionService:
             "current_page_path": session.current_page_path,
         }
 
+    def execute_bridge_action(
+        self,
+        session_id: str,
+        step_type: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        session = self._require_session(session_id)
+        try:
+            bridge_state = self.runtime_adapter.execute_bridge_action(
+                session.metadata,
+                session.current_page_path,
+                step_type,
+                payload,
+            )
+        except CliExecutionError as error:
+            raise self._attach_evidence(
+                session,
+                error,
+                extra_details={
+                    "step_type": step_type,
+                    "bridge_input": self._bridge_input_summary(payload),
+                },
+            )
+
+        session.current_page_path = bridge_state["current_page_path"]
+        self.repository.update(session)
+        return {
+            "session_id": session_id,
+            "step_type": step_type,
+            "bridge_method": bridge_state["bridge_method"],
+            "result": bridge_state["result"],
+            "current_page_path": session.current_page_path,
+        }
+
     def assert_page_path(self, session_id: str, expected_path: str) -> dict[str, Any]:
         session = self._require_session(session_id)
         page_state = self.runtime_adapter.get_current_page(
@@ -258,3 +292,20 @@ class ActionService:
                 details={"session_id": session_id},
             )
         return session
+
+    @staticmethod
+    def _bridge_input_summary(payload: dict[str, Any]) -> dict[str, Any]:
+        summary = {
+            key: value
+            for key, value in payload.items()
+            if key not in {"value", "formData"}
+        }
+        if "value" in payload:
+            summary["value_type"] = type(payload["value"]).__name__
+        if "formData" in payload:
+            form_data = payload["formData"]
+            if isinstance(form_data, dict):
+                summary["formDataKeys"] = sorted(str(key) for key in form_data)
+            else:
+                summary["formDataType"] = type(form_data).__name__
+        return summary

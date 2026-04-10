@@ -1,3 +1,4 @@
 lib/tests/
 python/**/__pycache__/
 python/**/*.py[cod]
+.tmp

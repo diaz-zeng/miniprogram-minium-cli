@@ -40,6 +40,31 @@
 - `assert.elementVisible`
 - 精确与模糊定位混合使用
 
+### Bridge 实验页
+
+源码：`src/pages/bridge-lab/index.tsx`
+
+用途：
+
+- 为 bridge 类 regression plan 提供稳定起点
+- 明确展示高优先级、中优先级与受 AppID 限制的 bridge 覆盖分组
+- 暴露可见的 `touristappid` 提示，方便跳过型计划使用显式页面锚点
+
+典型覆盖：
+
+- `storage.*`
+- `navigation.*`
+- `app.*`
+- `settings.*`
+- `clipboard.*`
+- `ui.*`
+- `location.*`
+- `media.*`
+- `file.*`
+- `device.*`
+- `auth.*`
+- `subscription.requestMessage`
+
 ### 手势页
 
 源码：`src/pages/gesture/index.tsx`
@@ -100,3 +125,9 @@
 - 模糊或混合计划：更接近模型生成和真实用户表达方式，适合验证高级定位能力
 
 如果你想先建立稳定基线，优先运行精确计划；如果你想验证 CLI 的更高层定位能力，再运行模糊或混合计划。
+
+bridge 相关计划还额外分成三类：
+
+- 默认 bridge 计划：使用 `runtimeMode: "auto"`，覆盖在示例小程序里默认应可使用的 bridge 能力
+- placeholder bridge 计划：使用 `runtimeMode: "placeholder"`，覆盖依赖相机、上传域名、设备容器或其他外部条件的 API
+- 受限 bridge 计划：保留 `runtimeMode: "auto"`，但通过 `requiresDeveloperAppId` 标记让执行器在 `touristappid` 下自动跳过
