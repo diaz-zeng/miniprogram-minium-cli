@@ -128,6 +128,37 @@ Install a specific repository skill through the open `skills` tool:
 npx skills add diaz-zeng/miniprogram-minium-cli --skill interactive-classname-tagging
 ```
 
+## Release Channels
+
+The repository publishes two npm channels:
+
+- `latest`: the stable release published from a matching `v*` git tag
+- `next`: the prerelease channel published automatically from `main` after merged PR changes
+
+Install the prerelease channel explicitly:
+
+```bash
+pnpm add -g miniprogram-minium-cli@next
+```
+
+## Maintainer Release Flow
+
+This repository treats `package.json.version` as the source of truth for the next stable release.
+
+1. Open a PR that updates `package.json.version` to the next intended stable version, such as `1.3.0`.
+2. Merge feature and fix PRs into `main` as usual. Each merge publishes a unique prerelease such as `1.3.0-beta.<run-id>.<attempt>.<sha>` to npm `next`.
+3. When the release is ready, create and push a matching git tag such as `v1.3.0`. The release workflow validates that the tag matches `package.json.version` before publishing `latest`.
+4. After the stable release lands, open another PR that advances `package.json.version` to the next stable target, such as `1.3.1` or `1.4.0`.
+
+For local debugging of the release helpers:
+
+```bash
+pnpm run release:compute-prerelease -- --run-id 123 --run-attempt 1 --sha abcdef1
+pnpm run release:validate-tag -- --tag v1.2.0
+```
+
+GitHub Actions publishing is designed for npm trusted publishing first. If trusted publishing is not configured yet, the publish steps also accept `NPM_TOKEN` as a temporary fallback through repository secrets.
+
 ## Quick Start
 
 Warm up the managed runtime:

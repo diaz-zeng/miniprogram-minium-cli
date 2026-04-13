@@ -128,6 +128,37 @@ miniprogram-minium-cli install --skills --path /path/to/skills
 npx skills add diaz-zeng/miniprogram-minium-cli --skill interactive-classname-tagging
 ```
 
+## 发布通道
+
+这个仓库会维护两个 npm 通道：
+
+- `latest`：由匹配的 `v*` git tag 触发的正式版
+- `next`：`main` 分支在 PR 合入后自动发布的预发布版
+
+如果要显式安装预发布通道，请执行：
+
+```bash
+pnpm add -g miniprogram-minium-cli@next
+```
+
+## 维护者发布流程
+
+这个仓库把 `package.json.version` 作为“下一个正式版”的唯一事实源。
+
+1. 先通过一个 PR 把 `package.json.version` 更新到下一个目标正式版本，例如 `1.3.0`。
+2. 按正常流程继续把功能和修复 PR 合入 `main`。每次合入后，GitHub Actions 都会发布一个唯一的预发布版本，例如 `1.3.0-beta.<run-id>.<attempt>.<sha>`，并打到 npm `next`。
+3. 当准备正式发版时，创建并推送匹配的 git tag，例如 `v1.3.0`。正式发布 workflow 会先校验该 tag 与 `package.json.version` 完全一致，再发布到 npm `latest`。
+4. 正式版发布完成后，再通过一个新的 PR 把 `package.json.version` 推进到下一个目标版本，例如 `1.3.1` 或 `1.4.0`。
+
+如果需要在本地调试发布辅助脚本，可以执行：
+
+```bash
+pnpm run release:compute-prerelease -- --run-id 123 --run-attempt 1 --sha abcdef1
+pnpm run release:validate-tag -- --tag v1.2.0
+```
+
+GitHub Actions 发布流程优先使用 npm trusted publishing。如果仓库暂时还没有配置 trusted publishing，也可以通过仓库 secrets 提供 `NPM_TOKEN` 作为过渡方案。
+
 ## 快速开始
 
 预热托管运行时：
