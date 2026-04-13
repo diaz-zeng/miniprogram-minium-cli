@@ -23,12 +23,12 @@ This repository contains:
 Requirements:
 
 - Node.js `>= 18`
-- `npm`
+- `pnpm`
 
 Install dependencies:
 
 ```bash
-npm install
+pnpm install
 ```
 
 ## Development Commands
@@ -36,19 +36,19 @@ npm install
 Build the TypeScript layer:
 
 ```bash
-npm run build
+pnpm run build
 ```
 
 Run type checks:
 
 ```bash
-npm run typecheck
+pnpm run typecheck
 ```
 
 Run the test suite:
 
 ```bash
-npm test
+pnpm test
 ```
 
 Warm up the managed runtime:
@@ -77,8 +77,8 @@ node lib/index.js prepare-runtime
 Before opening a change, run:
 
 ```bash
-npm run typecheck
-npm test
+pnpm run typecheck
+pnpm test
 ```
 
 If you change runtime behavior, also verify the affected execution path manually when practical.

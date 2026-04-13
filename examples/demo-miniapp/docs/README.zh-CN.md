@@ -19,19 +19,19 @@
 
 ```bash
 cd examples/demo-miniapp
-npm install
+pnpm install
 ```
 
 ## 构建微信小程序
 
 ```bash
-npm run build:weapp
+pnpm run build:weapp
 ```
 
 本地持续调试时可以使用：
 
 ```bash
-npm run dev:weapp
+pnpm run dev:weapp
 ```
 
 构建完成后，直接用微信开发者工具打开这个项目根目录即可。`project.config.json` 已经把 `miniprogramRoot` 指向了 `dist/`。

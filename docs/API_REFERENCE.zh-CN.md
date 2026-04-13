@@ -221,15 +221,15 @@ miniprogram-minium-cli install --skills [--path <path>] [--json]
 
 ```bash
 miniprogram-minium-cli install --skills
-npx --no-install miniprogram-minium-cli install --skills
-npx miniprogram-minium-cli install --skills
+pnpm exec miniprogram-minium-cli install --skills
+pnpm dlx miniprogram-minium-cli install --skills
 ```
 
 这个仓库里的 skills 也可以通过开放的 `skills` 工具按单个 skill 安装：
 
 ```bash
-npx skills add diaz-zeng/miniprogram-minium-cli --skill miniprogram-minium-cli
-npx skills add diaz-zeng/miniprogram-minium-cli --skill interactive-classname-tagging
+pnpm dlx skills add diaz-zeng/miniprogram-minium-cli --skill miniprogram-minium-cli
+pnpm dlx skills add diaz-zeng/miniprogram-minium-cli --skill interactive-classname-tagging
 ```
 
 ## `help`

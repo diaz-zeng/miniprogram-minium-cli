@@ -78,7 +78,7 @@ Relative paths inside the inline JSON are resolved from the current working dire
 ## Installation
 
 ```bash
-npm install -g miniprogram-minium-cli
+pnpm add -g miniprogram-minium-cli
 ```
 
 Host requirement:
@@ -93,28 +93,28 @@ Install the bundled skills into the default local skills directory:
 miniprogram-minium-cli install --skills
 ```
 
-Install the bundled skills through `npx` when the package is available locally:
+Install the bundled skills through `pnpm exec` when the package is available locally:
 
 ```bash
-npx --no-install miniprogram-minium-cli install --skills
+pnpm exec miniprogram-minium-cli install --skills
 ```
 
-Install directly through `npx` without a prior global install:
+Install directly through `pnpm dlx` without a prior global install:
 
 ```bash
-npx miniprogram-minium-cli install --skills
+pnpm dlx miniprogram-minium-cli install --skills
 ```
 
 Install directly from this repository through the open `skills` tool:
 
 ```bash
-npx skills add diaz-zeng/miniprogram-minium-cli --skill miniprogram-minium-cli
+pnpm dlx skills add diaz-zeng/miniprogram-minium-cli --skill miniprogram-minium-cli
 ```
 
 List the skills exposed by this repository before installing:
 
 ```bash
-npx skills add diaz-zeng/miniprogram-minium-cli --list
+pnpm dlx skills add diaz-zeng/miniprogram-minium-cli --list
 ```
 
 Install into a custom skills root:
@@ -125,7 +125,7 @@ miniprogram-minium-cli install --skills --path /path/to/skills
 
 By default, the command installs into `./.agents/skills` under the current working directory. For Claude Code, GitHub Copilot, and other coding agents, use `--path` to target an agent-specific local or global skills directory.
 
-If your agent already supports the open `skills` ecosystem, you can also install from the repository with `npx skills add diaz-zeng/miniprogram-minium-cli --skill miniprogram-minium-cli`.
+If your agent already supports the open `skills` ecosystem, you can also install from the repository with `pnpm dlx skills add diaz-zeng/miniprogram-minium-cli --skill miniprogram-minium-cli`.
 
 ## Bundled Skills
 
@@ -137,7 +137,7 @@ The repository currently bundles these skills:
 Install a specific repository skill through the open `skills` tool:
 
 ```bash
-npx skills add diaz-zeng/miniprogram-minium-cli --skill interactive-classname-tagging
+pnpm dlx skills add diaz-zeng/miniprogram-minium-cli --skill interactive-classname-tagging
 ```
 
 ## Quick Start

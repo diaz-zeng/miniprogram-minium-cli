@@ -8,8 +8,8 @@ These plans target the in-repository TaroJS demo miniapp at [../demo-miniapp](..
 
 ```bash
 cd examples/demo-miniapp
-npm install
-npm run build:weapp
+pnpm install
+pnpm run build:weapp
 ```
 
 2. Run plans from the repository root and provide the WeChat DevTools CLI path:

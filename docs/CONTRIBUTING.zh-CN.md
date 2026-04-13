@@ -23,12 +23,12 @@
 要求：
 
 - Node.js `>= 18`
-- `npm`
+- `pnpm`
 
 安装依赖：
 
 ```bash
-npm install
+pnpm install
 ```
 
 ## 开发命令
@@ -36,19 +36,19 @@ npm install
 构建 TypeScript 层：
 
 ```bash
-npm run build
+pnpm run build
 ```
 
 运行类型检查：
 
 ```bash
-npm run typecheck
+pnpm run typecheck
 ```
 
 运行测试：
 
 ```bash
-npm test
+pnpm test
 ```
 
 预热托管运行时：
@@ -77,8 +77,8 @@ node lib/index.js prepare-runtime
 在提交变更前，至少运行：
 
 ```bash
-npm run typecheck
-npm test
+pnpm run typecheck
+pnpm test
 ```
 
 如果修改了运行时行为，条件允许时也应做对应执行链路的手动验证。

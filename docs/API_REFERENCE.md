@@ -221,15 +221,15 @@ The command can be invoked in all of the following ways:
 
 ```bash
 miniprogram-minium-cli install --skills
-npx --no-install miniprogram-minium-cli install --skills
-npx miniprogram-minium-cli install --skills
+pnpm exec miniprogram-minium-cli install --skills
+pnpm dlx miniprogram-minium-cli install --skills
 ```
 
 The repository skills can also be installed individually through the open `skills` tool:
 
 ```bash
-npx skills add diaz-zeng/miniprogram-minium-cli --skill miniprogram-minium-cli
-npx skills add diaz-zeng/miniprogram-minium-cli --skill interactive-classname-tagging
+pnpm dlx skills add diaz-zeng/miniprogram-minium-cli --skill miniprogram-minium-cli
+pnpm dlx skills add diaz-zeng/miniprogram-minium-cli --skill interactive-classname-tagging
 ```
 
 ## `help`

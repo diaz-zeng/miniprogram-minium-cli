@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-04-13
+
 ### Added
 
 - Structured miniapp bridge actions for storage, navigation, app context, settings, clipboard, feedback UI, location, media, file, device, auth, and subscription flows.
@@ -16,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Local development now uses `pnpm` instead of `npm`, including repository scripts, lockfiles, and setup documentation.
 - Bridge-backed execution now retries real Minium session startup to reduce flaky `session.start` failures during acceptance runs.
 - Real-runtime tap gesture dispatch now triggers page tap state updates more reliably in the gesture demo flows.
 - Placeholder runtime page resolution now normalizes initial page paths before querying demo elements, which keeps placeholder bridge assertions aligned with the bundled plans.

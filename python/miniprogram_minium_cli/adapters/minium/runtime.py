@@ -244,12 +244,23 @@ class MiniumRuntimeAdapter:
             )
         next_page_path = query_state["current_page_path"]
         transitions = {
-            ("pages/index/index", "login-button"): "pages/home/index",
-            ("pages/home/index", "home-to-bridge-lab-button"): "pages/bridge-lab/index",
-            ("pages/bridge-lab/index", "bridge-to-home-button"): "pages/home/index",
-            ("pages/bridge-lab/index", "bridge-to-review-board-button"): "pages/review-board/index",
+            ("pages/index/index", "login-button"): ("pages/home/index", "replace"),
+            ("pages/home/index", "home-to-bridge-lab-button"): ("pages/bridge-lab/index", "push"),
+            ("pages/home/index", "home-to-gesture-button"): ("pages/gesture/index", "push"),
+            ("pages/home/index", "home-to-cursor-lab-button"): ("pages/cursor-lab/index", "push"),
+            ("pages/home/index", "home-to-review-board-button"): ("pages/review-board/index", "push"),
+            ("pages/bridge-lab/index", "bridge-to-home-button"): ("pages/home/index", "push"),
+            ("pages/bridge-lab/index", "bridge-to-review-board-button"): ("pages/review-board/index", "push"),
         }
-        next_page_path = transitions.get((next_page_path, str(match.get("id"))), next_page_path)
+        transition = transitions.get((next_page_path, str(match.get("id"))))
+        if transition is not None:
+            state = self._placeholder_bridge_state(session_metadata, next_page_path)
+            next_page_path = self._apply_placeholder_page_transition(
+                state,
+                current_page_path=next_page_path,
+                next_page_path=transition[0],
+                mode=transition[1],
+            )
         return {"current_page_path": next_page_path}
 
     def input_text(
@@ -463,7 +474,7 @@ class MiniumRuntimeAdapter:
         payload: dict[str, Any],
     ) -> Any:
         timeout_ms = int(payload.get("timeoutMs", 15_000))
-        timeout_seconds = max(1, int(timeout_ms / 1000))
+        timeout_seconds = max(timeout_ms / 1000, 0.001)
         message_id = app.call_wx_method_async(bridge_method, bridge_args)
         response = app.get_async_response(message_id, timeout=timeout_seconds)
         if response is None:
@@ -621,7 +632,7 @@ class MiniumRuntimeAdapter:
         step_type: str,
         payload: dict[str, Any],
     ) -> tuple[str, dict[str, Any]]:
-        current_stack = list(state["page_stack"])
+        current_stack = self._sync_placeholder_page_stack(state, current_page_path)
         next_path = self._normalize_page_path(str(payload.get("url", current_page_path)).split("?")[0])
 
         if step_type == "navigation.navigateTo":
@@ -647,6 +658,50 @@ class MiniumRuntimeAdapter:
             "delta": int(payload.get("delta", 1)),
             "pagePath": next_path,
         }
+
+    def _apply_placeholder_page_transition(
+        self,
+        state: dict[str, Any],
+        *,
+        current_page_path: str,
+        next_page_path: str,
+        mode: str,
+    ) -> str:
+        current_stack = self._sync_placeholder_page_stack(state, current_page_path)
+        normalized_next = self._normalize_page_path(next_page_path)
+
+        if mode == "replace":
+            if current_stack:
+                current_stack[-1] = normalized_next
+            else:
+                current_stack = [normalized_next]
+        elif mode == "reset":
+            current_stack = [normalized_next]
+        else:
+            if not current_stack or current_stack[-1] != normalized_next:
+                current_stack.append(normalized_next)
+
+        state["page_stack"] = current_stack
+        return normalized_next
+
+    def _sync_placeholder_page_stack(
+        self,
+        state: dict[str, Any],
+        current_page_path: str | None,
+    ) -> list[str]:
+        normalized_current = self._normalize_page_path(current_page_path)
+        current_stack = [self._normalize_page_path(path) for path in list(state.get("page_stack") or [])]
+
+        if not current_stack:
+            current_stack = [normalized_current]
+        elif current_stack[-1] != normalized_current:
+            if normalized_current in current_stack:
+                current_stack = current_stack[: current_stack.index(normalized_current) + 1]
+            else:
+                current_stack.append(normalized_current)
+
+        state["page_stack"] = current_stack
+        return current_stack
 
     def _build_bridge_request(self, step_type: str, payload: dict[str, Any]) -> tuple[str, Any]:
         if step_type == "storage.set":
