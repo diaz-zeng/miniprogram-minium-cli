@@ -1,0 +1,78 @@
+name: Publish npm prerelease
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: npm-prerelease-main
+  cancel-in-progress: true
+
+jobs:
+  publish-prerelease:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Compute prerelease version
+        id: version
+        run: |
+          VERSION="$(pnpm --silent run release:compute-prerelease -- --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" --sha "$GITHUB_SHA")"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Computed prerelease version: $VERSION"
+
+      - name: Stage publishable package
+        id: stage
+        run: |
+          PACKAGE_DIR="$RUNNER_TEMP/miniprogram-minium-cli-prerelease"
+          pnpm --silent run release:stage-package -- --version "${{ steps.version.outputs.version }}" --output-dir "$PACKAGE_DIR"
+          echo "package_dir=$PACKAGE_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Publish prerelease to npm
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -n "${NPM_TOKEN:-}" ]; then
+            export NODE_AUTH_TOKEN="$NPM_TOKEN"
+          fi
+          if ! npm publish "${{ steps.stage.outputs.package_dir }}" --tag next --provenance --access public; then
+            echo "::error::npm prerelease publish failed. Configure npm trusted publishing for this repository or provide NPM_TOKEN as a temporary fallback."
+            exit 1
+          fi
+
+      - name: Write workflow summary
+        run: |
+          {
+            echo "## npm prerelease published"
+            echo
+            echo "- Version: \`${{ steps.version.outputs.version }}\`"
+            echo "- Dist-tag: \`next\`"
+            echo "- Install: \`pnpm add -g miniprogram-minium-cli@next\`"
+          } >> "$GITHUB_STEP_SUMMARY"

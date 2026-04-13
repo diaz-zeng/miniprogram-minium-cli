@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-04-13
+
+### Changed
+
+- Published `1.2.1` as a release-automation verification build. Its functionality is identical to `1.2.0`; this version exists only to validate the automated packaging and publishing flow.
+
 ## [1.2.0] - 2026-04-13
 
 ### Added

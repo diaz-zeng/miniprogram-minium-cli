@@ -1,0 +1,78 @@
+name: Publish npm release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: npm-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Validate tag and package version
+        id: version
+        run: |
+          VERSION="$(pnpm --silent run release:validate-tag -- --tag "$GITHUB_REF_NAME")"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Validated release version: $VERSION"
+
+      - name: Stage publishable package
+        id: stage
+        run: |
+          PACKAGE_DIR="$RUNNER_TEMP/miniprogram-minium-cli-release"
+          pnpm --silent run release:stage-package -- --version "${{ steps.version.outputs.version }}" --output-dir "$PACKAGE_DIR"
+          echo "package_dir=$PACKAGE_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Publish stable release to npm
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -n "${NPM_TOKEN:-}" ]; then
+            export NODE_AUTH_TOKEN="$NPM_TOKEN"
+          fi
+          if ! npm publish "${{ steps.stage.outputs.package_dir }}" --provenance --access public; then
+            echo "::error::npm release publish failed. Check tag/package version consistency and configure npm trusted publishing or NPM_TOKEN."
+            exit 1
+          fi
+
+      - name: Write workflow summary
+        run: |
+          {
+            echo "## npm release published"
+            echo
+            echo "- Version: \`${{ steps.version.outputs.version }}\`"
+            echo "- Dist-tag: \`latest\`"
+            echo "- Install: \`pnpm add -g miniprogram-minium-cli\`"
+          } >> "$GITHUB_STEP_SUMMARY"

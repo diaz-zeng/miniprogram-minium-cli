@@ -91,6 +91,15 @@ pnpm test
 
 If you change runtime behavior, also verify the affected execution path manually when practical.
 
+## Release Workflow Expectations
+
+- `package.json.version` represents the next intended stable release, not the current prerelease iteration.
+- Update the next stable version through a normal PR before relying on automated prerelease publishing from `main`.
+- Merged changes on `main` publish prerelease builds to npm `next`.
+- Stable releases are published only from matching `v*` tags, and the workflow must see the same version in `package.json`.
+- After publishing a stable release, open a follow-up PR to move `package.json.version` to the next stable target.
+- Prefer npm trusted publishing for GitHub Actions. If it is not available yet, use `NPM_TOKEN` only as a temporary fallback.
+
 ## Commit Message Rules
 
 - Use English commit messages.
