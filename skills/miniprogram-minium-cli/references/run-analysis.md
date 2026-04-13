@@ -17,9 +17,12 @@ Prefer these files over raw terminal output:
 - Passed, failed, and skipped counts
 - Failure code and message
 - Artifact paths for screenshots and summaries
+- Bridge-backed step outputs under `result`
+- Skip reasons for AppID-restricted bridge-backed steps
 
 ## Guidance
 
 - Start from the structured files in the run directory.
 - Use screenshots for visual confirmation or failure forensics.
 - Do not infer unsupported runtime behavior from logs when the structured result already answers the question.
+- For bridge-backed steps, prefer `bridge_method`, `result`, and `current_page_path` from the structured output over terminal text.

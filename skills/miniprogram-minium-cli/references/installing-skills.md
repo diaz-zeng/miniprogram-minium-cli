@@ -8,18 +8,6 @@ Use this reference when the task is to install the repository-bundled skills int
 miniprogram-minium-cli install --skills
 ```
 
-If the package is already available locally, use:
-
-```bash
-npx --no-install miniprogram-minium-cli install --skills
-```
-
-If you want to install via `npx` without a prior global install, use:
-
-```bash
-npx miniprogram-minium-cli install --skills
-```
-
 If your agent supports the open `skills` ecosystem, install the main product-use skill directly from this repository:
 
 ```bash
@@ -67,8 +55,4 @@ Use JSON mode when another agent or script needs the installed paths.
 
 ## Command availability
 
-If the global `miniprogram-minium-cli` command is unavailable but the package exists locally, prefer:
-
-```bash
-npx --no-install miniprogram-minium-cli install --skills
-```
+Install the CLI first if `miniprogram-minium-cli` is unavailable in the shell, then rerun the bundled skill installation command.

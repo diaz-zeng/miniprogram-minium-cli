@@ -217,19 +217,17 @@ When `--json` is used, the output includes fields such as:
 
 ### Invocation patterns
 
-The command can be invoked in all of the following ways:
+Document the install workflow in these two user-facing modes:
 
 ```bash
 miniprogram-minium-cli install --skills
-pnpm exec miniprogram-minium-cli install --skills
-pnpm dlx miniprogram-minium-cli install --skills
 ```
 
 The repository skills can also be installed individually through the open `skills` tool:
 
 ```bash
-pnpm dlx skills add diaz-zeng/miniprogram-minium-cli --skill miniprogram-minium-cli
-pnpm dlx skills add diaz-zeng/miniprogram-minium-cli --skill interactive-classname-tagging
+npx skills add diaz-zeng/miniprogram-minium-cli --skill miniprogram-minium-cli
+npx skills add diaz-zeng/miniprogram-minium-cli --skill interactive-classname-tagging
 ```
 
 ## `help`
