@@ -71,6 +71,14 @@ node lib/index.js prepare-runtime
 - `docs/README.zh-CN.md` is the Chinese mirror document.
 - Keep English and Chinese README files aligned when one of them changes.
 - Example-specific explanations should live under `examples/` rather than the root README.
+- Keep repository-managed skills under `skills/` aligned with documented CLI behavior and plan semantics.
+
+## OpenSpec Workflow Expectations
+
+- Use OpenSpec artifacts under `openspec/changes/<change>/` to track user-visible capability changes.
+- When a change adds or modifies documented CLI commands, plan schema, step types, run artifacts, or other agent-facing workflows, explicitly assess whether repository-managed skills under `skills/` need an update.
+- If the skill guidance would become stale, include the skill update in the same OpenSpec change instead of treating it as unrelated follow-up work.
+- Reflect applicable skill work in the change artifacts, such as `proposal.md`, `design.md`, or `tasks.md`, so reviewers can verify the agent-facing workflow remains consistent.
 
 ## Testing Expectations
 

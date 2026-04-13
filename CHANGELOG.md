@@ -14,7 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Structured miniapp bridge actions for storage, navigation, app context, settings, clipboard, feedback UI, location, media, file, device, auth, and subscription flows.
 - Bridge-focused demo coverage in `examples/demo-miniapp/src/pages/bridge-lab/` and bundled regression plans `09-bridge-high-priority.exact.plan.json`, `10-bridge-medium.placeholder.plan.json`, and `11-bridge-tourist-skip.exact.plan.json`.
-- Acceptance tracking for `add-miniapp-bridge-actions` through `openspec/changes/add-miniapp-bridge-actions/acceptance-checklist.md`.
+- Bridge-focused product-use skill guidance under `skills/miniprogram-minium-cli/`, including a dedicated `references/bridge-actions.md` reference for plan authoring, execution, and run analysis.
 
 ### Changed
 
@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Placeholder runtime page resolution now normalizes initial page paths before querying demo elements, which keeps placeholder bridge assertions aligned with the bundled plans.
 - The bridge lab tourist AppID note now renders plain `touristappid` text so real-runtime assertions match the bundled regression plans.
 - Completed acceptance verification for all bundled demo regression plans, including a dedicated tourist-AppID validation pass for the restricted bridge skip scenario.
+- User-facing skill installation docs now only describe two supported paths: `miniprogram-minium-cli install --skills` and repository installation through the open `skills` tool.
 
 ## [1.1.0] - 2026-04-08
 

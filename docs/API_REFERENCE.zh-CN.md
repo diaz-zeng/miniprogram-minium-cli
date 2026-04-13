@@ -217,19 +217,17 @@ miniprogram-minium-cli install --skills [--path <path>] [--json]
 
 ### 调用方式
 
-这个命令可以通过以下几种方式调用：
+对用户只保留以下两种安装路径说明：
 
 ```bash
 miniprogram-minium-cli install --skills
-pnpm exec miniprogram-minium-cli install --skills
-pnpm dlx miniprogram-minium-cli install --skills
 ```
 
 这个仓库里的 skills 也可以通过开放的 `skills` 工具按单个 skill 安装：
 
 ```bash
-pnpm dlx skills add diaz-zeng/miniprogram-minium-cli --skill miniprogram-minium-cli
-pnpm dlx skills add diaz-zeng/miniprogram-minium-cli --skill interactive-classname-tagging
+npx skills add diaz-zeng/miniprogram-minium-cli --skill miniprogram-minium-cli
+npx skills add diaz-zeng/miniprogram-minium-cli --skill interactive-classname-tagging
 ```
 
 ## `help`

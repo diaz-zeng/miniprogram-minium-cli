@@ -71,6 +71,14 @@ node lib/index.js prepare-runtime
 - `docs/README.zh-CN.md` 是中文镜像文档。
 - 修改其中一份 README 时，应同步检查另一份是否需要更新。
 - 示例相关的详细说明应放在 `examples/` 目录下，而不是根 README 中。
+- 保持 `skills/` 目录下由仓库维护的 skills 与已文档化的 CLI 行为和 plan 语义一致。
+
+## OpenSpec 流程要求
+
+- 通过 `openspec/changes/<change>/` 下的 OpenSpec 制品跟踪用户可见能力变更。
+- 当某个 change 新增或修改了已文档化的 CLI 命令、plan schema、步骤类型、运行产物或其他面向 agent 的工作流时，应显式评估是否需要同步更新 `skills/` 目录下的仓库技能。
+- 如果 skill 指导内容会因此过期，就应把 skill 更新纳入同一个 OpenSpec change，而不是留作无关的后续补丁。
+- 只要该变更包含 skill 相关工作，就应在 `proposal.md`、`design.md` 或 `tasks.md` 等制品中体现出来，方便评审时核对 agent-facing workflow 是否仍然一致。
 
 ## 测试要求
 

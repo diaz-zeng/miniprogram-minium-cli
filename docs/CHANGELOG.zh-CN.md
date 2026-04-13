@@ -14,7 +14,7 @@
 
 - 新增结构化 miniapp bridge actions，覆盖存储、路由、应用上下文、设置、剪贴板、反馈 UI、位置、媒体、文件、设备、鉴权与订阅消息等能力域。
 - 在 `examples/demo-miniapp/src/pages/bridge-lab/` 中新增 bridge 专用示例页面，并新增 `09-bridge-high-priority.exact.plan.json`、`10-bridge-medium.placeholder.plan.json`、`11-bridge-tourist-skip.exact.plan.json` 三个随仓库回归计划。
-- 为 `add-miniapp-bridge-actions` 新增验收跟踪清单 `openspec/changes/add-miniapp-bridge-actions/acceptance-checklist.md`。
+- 在 `skills/miniprogram-minium-cli/` 中补齐 bridge 能力的产品使用指引，并新增专门的 `references/bridge-actions.md` 供 plan 编写、执行与结果分析使用。
 
 ### Changed
 
@@ -24,6 +24,7 @@
 - placeholder 运行时在查询示例页面元素前会先规范化初始页面路径，使 placeholder bridge 断言与随仓库计划保持一致。
 - bridge lab 页面中的 tourist AppID 提示已改为渲染纯文本 `touristappid`，避免真实运行时断言与回归计划文案不一致。
 - 已完成全部随仓库 demo regression plan 的验收验证，其中受限 bridge 跳过场景额外补充了一次 `touristappid` 专项验证。
+- 面向用户的 skill 安装文档现已收敛为两条路径：`miniprogram-minium-cli install --skills`，或通过开放 `skills` 工具从仓库安装。
 
 ## [1.1.0] - 2026-04-08
 
