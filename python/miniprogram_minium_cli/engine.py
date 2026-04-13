@@ -23,6 +23,57 @@ from .support.logging import get_logger
 
 PROTOCOL_VERSION = 1
 
+_BRIDGE_STEP_TYPES = {
+    "storage.set",
+    "storage.get",
+    "storage.info",
+    "storage.remove",
+    "storage.clear",
+    "navigation.navigateTo",
+    "navigation.redirectTo",
+    "navigation.reLaunch",
+    "navigation.switchTab",
+    "navigation.back",
+    "app.getLaunchOptions",
+    "app.getSystemInfo",
+    "app.getAccountInfo",
+    "settings.get",
+    "settings.authorize",
+    "settings.open",
+    "clipboard.set",
+    "clipboard.get",
+    "ui.showToast",
+    "ui.hideToast",
+    "ui.showLoading",
+    "ui.hideLoading",
+    "ui.showModal",
+    "ui.showActionSheet",
+    "location.get",
+    "location.choose",
+    "location.open",
+    "media.chooseImage",
+    "media.chooseMedia",
+    "media.takePhoto",
+    "media.getImageInfo",
+    "media.saveImageToPhotosAlbum",
+    "file.upload",
+    "file.download",
+    "device.scanCode",
+    "device.makePhoneCall",
+    "auth.login",
+    "auth.checkSession",
+    "subscription.requestMessage",
+}
+
+_TOURIST_APPID_RESTRICTED_STEP_TYPES = {
+    "ui.showModal",
+    "ui.showActionSheet",
+    "settings.authorize",
+    "location.get",
+    "location.choose",
+    "subscription.requestMessage",
+}
+
 
 def execute_request(request: dict[str, Any]) -> dict[str, Any]:
     try:
@@ -126,6 +177,8 @@ def _execute_plan(plan: dict[str, Any]) -> dict[str, Any]:
         "finalSessionId": execution_result["final_session_id"],
         "autoClosedSessionIds": execution_result["auto_closed_session_ids"],
     }
+    if execution_result["skipped_steps"]:
+        summary["skipped"] = execution_result["skipped_steps"]
     if execution_result.get("latest_page_path"):
         summary["latestPagePath"] = execution_result["latest_page_path"]
     if execution_result.get("failure_error"):
@@ -299,15 +352,27 @@ class _ExecutionEngine:
         finally:
             auto_closed_session_ids = self._session_service.cleanup_all()
 
-        success_count = sum(1 for item in step_results if item.get("ok"))
+        success_count = sum(1 for item in step_results if item.get("status") == "passed")
         failed_count = sum(1 for item in step_results if item.get("status") == "failed")
         skipped_count = sum(1 for item in step_results if item.get("status") == "skipped")
+        skipped_steps = [
+            {
+                "id": item.get("id"),
+                "type": item.get("type"),
+                "reason": (item.get("output") or {}).get("skip_reason")
+                if isinstance(item.get("output"), dict)
+                else None,
+            }
+            for item in step_results
+            if item.get("status") == "skipped"
+        ]
 
         return {
             "status": status,
             "success_count": success_count,
             "failed_count": failed_count,
             "skipped_count": skipped_count,
+            "skipped_steps": skipped_steps,
             "step_results": step_results,
             "latest_page_path": self._latest_page_path,
             "final_session_id": self._current_session_id,
@@ -321,6 +386,17 @@ class _ExecutionEngine:
         step_type = step["type"]
         input_data = step.get("input", {})
         started_at = time.perf_counter()
+
+        skip_result = self._maybe_skip_step(step_type, input_data)
+        if skip_result is not None:
+            return {
+                "id": step.get("id"),
+                "type": step_type,
+                "ok": True,
+                "status": "skipped",
+                "output": skip_result,
+                "durationMs": int((time.perf_counter() - started_at) * 1000),
+            }
 
         try:
             if step_type == "session.start":
@@ -371,6 +447,13 @@ class _ExecutionEngine:
                     self._require_session_id(input_data),
                     locator,
                 )
+            elif step_type in _BRIDGE_STEP_TYPES:
+                output = self._action_service.execute_bridge_action(
+                    self._require_session_id(input_data),
+                    step_type,
+                    input_data,
+                )
+                self._latest_page_path = output.get("current_page_path")
             elif step_type == "gesture.touchStart":
                 target = GestureTarget.from_input(input_data)
                 output = self._gesture_service.touch_start(
@@ -514,3 +597,27 @@ class _ExecutionEngine:
             error_code=ErrorCode.SESSION_ERROR,
             message=t("error.session_required"),
         )
+
+    def _maybe_skip_step(self, step_type: str, input_data: dict[str, Any]) -> dict[str, Any] | None:
+        session_id = input_data.get("sessionId") or self._current_session_id
+        if not session_id:
+            return None
+        session = self._session_service.require_session(session_id)
+        if not bool(session.metadata.get("uses_tourist_appid")):
+            return None
+
+        requires_developer_appid = bool(input_data.get("requiresDeveloperAppId"))
+        if not requires_developer_appid and step_type not in _TOURIST_APPID_RESTRICTED_STEP_TYPES:
+            return None
+
+        reason = input_data.get("skipReason")
+        if not isinstance(reason, str) or not reason.strip():
+            reason = "Skipped because the target project uses touristappid and this action requires a developer-owned AppID."
+
+        self._latest_page_path = session.current_page_path
+        return {
+            "skipped": True,
+            "skip_reason": reason,
+            "uses_tourist_appid": True,
+            "current_page_path": session.current_page_path,
+        }

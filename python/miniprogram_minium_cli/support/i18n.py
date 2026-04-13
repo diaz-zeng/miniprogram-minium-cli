@@ -47,6 +47,9 @@ _MESSAGES = {
         "error.minium_tap_not_supported": "The Minium runtime does not expose a tap primitive for this target.",
         "error.minium_touch_not_supported": "The Minium runtime does not expose the requested touch primitive.",
         "error.no_matching_element": "No matching element was found.",
+        "error.bridge_runtime_unavailable": "Bridge action runtime is not available.",
+        "error.bridge_async_timeout": "Bridge action timed out while waiting for an async response.",
+        "error.bridge_action_failed": "Bridge action failed.",
     },
     "zh-CN": {
         "error.unsupported_command": "不支持的命令：{command}",
@@ -88,6 +91,9 @@ _MESSAGES = {
         "error.minium_tap_not_supported": "当前 Minium 运行时没有暴露该目标的 tap 原语。",
         "error.minium_touch_not_supported": "当前 Minium 运行时没有暴露所请求的触摸原语。",
         "error.no_matching_element": "未找到匹配的元素。",
+        "error.bridge_runtime_unavailable": "桥接动作运行时当前不可用。",
+        "error.bridge_async_timeout": "桥接动作等待异步结果超时。",
+        "error.bridge_action_failed": "桥接动作执行失败。",
     },
 }
 

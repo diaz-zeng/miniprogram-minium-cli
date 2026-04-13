@@ -19,6 +19,31 @@ from ...support.i18n import t
 
 SessionMode = Literal["launch", "attach"]
 
+_BRIDGE_ASYNC_STEP_TYPES = {
+    "location.get",
+    "location.choose",
+    "media.chooseImage",
+    "media.chooseMedia",
+    "media.takePhoto",
+    "file.upload",
+    "file.download",
+    "device.scanCode",
+    "auth.login",
+    "auth.checkSession",
+    "subscription.requestMessage",
+    "ui.showModal",
+    "ui.showActionSheet",
+}
+
+_TOURIST_APPID_RESTRICTED_STEP_TYPES = {
+    "ui.showModal",
+    "ui.showActionSheet",
+    "settings.authorize",
+    "location.get",
+    "location.choose",
+    "subscription.requestMessage",
+}
+
 _PLACEHOLDER_PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9o9l9x8AAAAASUVORK5CYII="
 )
@@ -68,6 +93,7 @@ class MiniumRuntimeAdapter:
             initial_page_path=initial_page_path,
             metadata=metadata,
             environment=environment,
+            project_path=resolved_project_path,
         )
 
     def stop_session(self, session_metadata: dict[str, Any]) -> None:
@@ -98,7 +124,7 @@ class MiniumRuntimeAdapter:
                     "renderer": getattr(page, "renderer", None),
                 },
             }
-        resolved_page = current_page_path or "pages/index/index"
+        resolved_page = self._normalize_page_path(current_page_path)
         return {
             "current_page_path": resolved_page,
             "page_summary": {
@@ -127,7 +153,7 @@ class MiniumRuntimeAdapter:
 
         target_path.write_bytes(_PLACEHOLDER_PNG)
         return {
-            "current_page_path": current_page_path or "pages/index/index",
+            "current_page_path": self._normalize_page_path(current_page_path),
             "artifact_path": str(target_path),
             "source": "placeholder-runtime",
         }
@@ -148,7 +174,7 @@ class MiniumRuntimeAdapter:
                 "matches": [self._serialize_real_element(element, locator) for element in elements],
             }
 
-        page_path = current_page_path or "pages/index/index"
+        page_path = self._normalize_page_path(current_page_path)
         elements = self._placeholder_elements(page_path)
         matches = [element for element in elements if self._matches(locator, element)]
         if locator.index >= len(matches):
@@ -217,8 +243,24 @@ class MiniumRuntimeAdapter:
                 details={"locator": locator.to_dict()},
             )
         next_page_path = query_state["current_page_path"]
-        if match.get("id") == "login-button" and next_page_path == "pages/index/index":
-            next_page_path = "pages/home/index"
+        transitions = {
+            ("pages/index/index", "login-button"): ("pages/home/index", "replace"),
+            ("pages/home/index", "home-to-bridge-lab-button"): ("pages/bridge-lab/index", "push"),
+            ("pages/home/index", "home-to-gesture-button"): ("pages/gesture/index", "push"),
+            ("pages/home/index", "home-to-cursor-lab-button"): ("pages/cursor-lab/index", "push"),
+            ("pages/home/index", "home-to-review-board-button"): ("pages/review-board/index", "push"),
+            ("pages/bridge-lab/index", "bridge-to-home-button"): ("pages/home/index", "push"),
+            ("pages/bridge-lab/index", "bridge-to-review-board-button"): ("pages/review-board/index", "push"),
+        }
+        transition = transitions.get((next_page_path, str(match.get("id"))))
+        if transition is not None:
+            state = self._placeholder_bridge_state(session_metadata, next_page_path)
+            next_page_path = self._apply_placeholder_page_transition(
+                state,
+                current_page_path=next_page_path,
+                next_page_path=transition[0],
+                mode=transition[1],
+            )
         return {"current_page_path": next_page_path}
 
     def input_text(
@@ -293,7 +335,7 @@ class MiniumRuntimeAdapter:
                 },
             )
 
-        page_path = current_page_path or "pages/index/index"
+        page_path = self._normalize_page_path(current_page_path)
         if condition.kind == "page_path_equals":
             if page_path == condition.expected_value:
                 return {"current_page_path": page_path}
@@ -314,6 +356,580 @@ class MiniumRuntimeAdapter:
                 "timeout_ms": condition.timeout_ms,
             },
         )
+
+    def execute_bridge_action(
+        self,
+        session_metadata: dict[str, Any],
+        current_page_path: str | None,
+        step_type: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """执行结构化 wx 能力桥接动作。"""
+        try:
+            driver = session_metadata.get("runtime_driver")
+            if driver is not None:
+                return self._execute_real_bridge_action(
+                    session_metadata,
+                    current_page_path,
+                    step_type,
+                    payload,
+                )
+            return self._execute_placeholder_bridge_action(
+                session_metadata,
+                current_page_path,
+                step_type,
+                payload,
+            )
+        except CliExecutionError:
+            raise
+        except Exception as exc:
+            raise CliExecutionError(
+                error_code=ErrorCode.ACTION_ERROR,
+                message=t("error.bridge_action_failed"),
+                details={
+                    "step_type": step_type,
+                    "cause": self._format_exception(exc),
+                },
+            ) from exc
+
+    def _execute_real_bridge_action(
+        self,
+        session_metadata: dict[str, Any],
+        current_page_path: str | None,
+        step_type: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        app = session_metadata.get("runtime_app")
+        if app is None and session_metadata.get("runtime_driver") is not None:
+            app = session_metadata["runtime_driver"].app
+        if app is None:
+            raise CliExecutionError(
+                error_code=ErrorCode.ACTION_ERROR,
+                message=t("error.bridge_runtime_unavailable"),
+                details={"step_type": step_type},
+            )
+
+        route_state = self._execute_real_navigation_action(app, current_page_path, step_type, payload)
+        if route_state is not None:
+            return route_state
+
+        bridge_method, bridge_args = self._build_bridge_request(step_type, payload)
+        if step_type in _BRIDGE_ASYNC_STEP_TYPES:
+            response = self._call_real_bridge_async(app, bridge_method, bridge_args, payload)
+        else:
+            response = app.call_wx_method(bridge_method, bridge_args)
+
+        next_page = app.get_current_page()
+        return {
+            "bridge_method": bridge_method,
+            "result": self._extract_bridge_result(response),
+            "current_page_path": self._normalize_page_path(getattr(next_page, "path", current_page_path)),
+        }
+
+    def _execute_real_navigation_action(
+        self,
+        app: Any,
+        current_page_path: str | None,
+        step_type: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        route_result = None
+        bridge_method = None
+
+        if step_type == "navigation.navigateTo":
+            bridge_method = "navigateTo"
+            route_result = app.navigate_to(payload["url"])
+        elif step_type == "navigation.redirectTo":
+            bridge_method = "redirectTo"
+            route_result = app.redirect_to(payload["url"])
+        elif step_type == "navigation.reLaunch":
+            bridge_method = "reLaunch"
+            route_result = app.relaunch(payload["url"])
+        elif step_type == "navigation.switchTab":
+            bridge_method = "switchTab"
+            route_result = app.switch_tab(payload["url"])
+        elif step_type == "navigation.back":
+            bridge_method = "navigateBack"
+            route_result = app.navigate_back(int(payload.get("delta", 1)))
+
+        if bridge_method is None:
+            return None
+
+        route_path = getattr(route_result, "path", current_page_path)
+        return {
+            "bridge_method": bridge_method,
+            "result": {
+                "url": payload.get("url"),
+                "delta": int(payload.get("delta", 1)),
+                "pagePath": self._normalize_page_path(route_path),
+            },
+            "current_page_path": self._normalize_page_path(route_path),
+        }
+
+    def _call_real_bridge_async(
+        self,
+        app: Any,
+        bridge_method: str,
+        bridge_args: Any,
+        payload: dict[str, Any],
+    ) -> Any:
+        timeout_ms = int(payload.get("timeoutMs", 15_000))
+        timeout_seconds = max(timeout_ms / 1000, 0.001)
+        message_id = app.call_wx_method_async(bridge_method, bridge_args)
+        response = app.get_async_response(message_id, timeout=timeout_seconds)
+        if response is None:
+            raise CliExecutionError(
+                error_code=ErrorCode.ACTION_ERROR,
+                message=t("error.bridge_async_timeout"),
+                details={
+                    "bridge_method": bridge_method,
+                    "timeout_ms": timeout_ms,
+                },
+            )
+        return response
+
+    def _execute_placeholder_bridge_action(
+        self,
+        session_metadata: dict[str, Any],
+        current_page_path: str | None,
+        step_type: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        state = self._placeholder_bridge_state(session_metadata, current_page_path)
+        page_path = self._normalize_page_path(current_page_path or state["page_stack"][-1])
+
+        if step_type == "storage.set":
+            state["storage"][payload["key"]] = payload["value"]
+            result = {"key": payload["key"], "value": payload["value"]}
+        elif step_type == "storage.get":
+            result = {"key": payload["key"], "value": state["storage"].get(payload["key"])}
+        elif step_type == "storage.info":
+            keys = sorted(state["storage"].keys())
+            result = {"keys": keys, "currentSize": len(keys), "limitSize": 10240}
+        elif step_type == "storage.remove":
+            existed = payload["key"] in state["storage"]
+            state["storage"].pop(payload["key"], None)
+            result = {"key": payload["key"], "removed": existed}
+        elif step_type == "storage.clear":
+            state["storage"].clear()
+            result = {"cleared": True}
+        elif step_type.startswith("navigation."):
+            page_path, result = self._execute_placeholder_navigation_action(state, page_path, step_type, payload)
+        elif step_type == "app.getLaunchOptions":
+            result = {
+                "path": page_path,
+                "query": {},
+                "scene": 1001,
+                "referrerInfo": {},
+            }
+        elif step_type == "app.getSystemInfo":
+            result = {
+                "brand": "devtools",
+                "model": "placeholder",
+                "platform": "devtools",
+                "pixelRatio": 2,
+                "screenWidth": 375,
+                "screenHeight": 812,
+                "windowWidth": 375,
+                "windowHeight": 812,
+            }
+        elif step_type == "app.getAccountInfo":
+            result = {
+                "miniProgram": {
+                    "appId": session_metadata.get("project_appid") or "mock-appid",
+                    "envVersion": "develop",
+                }
+            }
+        elif step_type == "settings.get":
+            result = {"authSetting": dict(state["settings"])}
+        elif step_type == "settings.authorize":
+            state["settings"][payload["scope"]] = True
+            result = {"scope": payload["scope"], "authorized": True}
+        elif step_type == "settings.open":
+            result = {"opened": True}
+        elif step_type == "clipboard.set":
+            state["clipboard"] = payload["text"]
+            result = {"text": payload["text"]}
+        elif step_type == "clipboard.get":
+            result = {"text": state["clipboard"]}
+        elif step_type == "ui.showToast":
+            state["ui_state"] = {"type": "toast", "title": payload["title"]}
+            result = {"shown": True, "title": payload["title"]}
+        elif step_type == "ui.hideToast":
+            state["ui_state"] = {"type": "toast", "title": ""}
+            result = {"hidden": True}
+        elif step_type == "ui.showLoading":
+            state["ui_state"] = {"type": "loading", "title": payload["title"]}
+            result = {"shown": True, "title": payload["title"]}
+        elif step_type == "ui.hideLoading":
+            state["ui_state"] = {"type": "loading", "title": ""}
+            result = {"hidden": True}
+        elif step_type == "ui.showModal":
+            result = {"confirm": True, "cancel": False, "content": payload["content"]}
+        elif step_type == "ui.showActionSheet":
+            result = {"tapIndex": 0, "item": payload["itemList"][0]}
+        elif step_type == "location.get":
+            result = {
+                "latitude": 23.1291,
+                "longitude": 113.2644,
+                "speed": -1,
+                "accuracy": 30,
+            }
+        elif step_type == "location.choose":
+            result = {
+                "name": "Demo Location",
+                "address": "Tianhe District",
+                "latitude": 23.1291,
+                "longitude": 113.2644,
+            }
+        elif step_type == "location.open":
+            result = {
+                "opened": True,
+                "latitude": payload["latitude"],
+                "longitude": payload["longitude"],
+            }
+        elif step_type == "media.chooseImage":
+            result = {"tempFilePaths": ["/tmp/mock-image.png"], "tempFiles": [{"path": "/tmp/mock-image.png"}]}
+        elif step_type == "media.chooseMedia":
+            result = {"tempFiles": [{"tempFilePath": "/tmp/mock-media.png", "fileType": "image"}]}
+        elif step_type == "media.takePhoto":
+            result = {"tempImagePath": "/tmp/mock-photo.png"}
+        elif step_type == "media.getImageInfo":
+            result = {"path": payload["src"], "width": 120, "height": 120, "type": "png"}
+        elif step_type == "media.saveImageToPhotosAlbum":
+            result = {"saved": True, "filePath": payload["filePath"]}
+        elif step_type == "file.upload":
+            result = {"statusCode": 200, "data": "{\"ok\":true}", "errMsg": "uploadFile:ok"}
+        elif step_type == "file.download":
+            result = {"tempFilePath": "/tmp/mock-download.bin", "statusCode": 200}
+        elif step_type == "device.scanCode":
+            result = {"result": "MINIUM-DEMO-CODE", "scanType": "QR_CODE"}
+        elif step_type == "device.makePhoneCall":
+            result = {"called": True, "phoneNumber": payload["phoneNumber"]}
+        elif step_type == "auth.login":
+            result = {"code": "mock-login-code"}
+        elif step_type == "auth.checkSession":
+            result = {"valid": True}
+        elif step_type == "subscription.requestMessage":
+            result = {"accepted": True, "tmplIds": list(payload["tmplIds"])}
+        else:
+            raise CliExecutionError(
+                error_code=ErrorCode.PLAN_ERROR,
+                message=t("error.step_not_implemented", step_type=step_type),
+                details={"step_type": step_type},
+            )
+
+        return {
+            "bridge_method": self._bridge_method_name(step_type),
+            "result": result,
+            "current_page_path": page_path,
+        }
+
+    def _execute_placeholder_navigation_action(
+        self,
+        state: dict[str, Any],
+        current_page_path: str,
+        step_type: str,
+        payload: dict[str, Any],
+    ) -> tuple[str, dict[str, Any]]:
+        current_stack = self._sync_placeholder_page_stack(state, current_page_path)
+        next_path = self._normalize_page_path(str(payload.get("url", current_page_path)).split("?")[0])
+
+        if step_type == "navigation.navigateTo":
+            current_stack.append(next_path)
+        elif step_type == "navigation.redirectTo":
+            if current_stack:
+                current_stack[-1] = next_path
+            else:
+                current_stack.append(next_path)
+        elif step_type == "navigation.reLaunch":
+            current_stack = [next_path]
+        elif step_type == "navigation.switchTab":
+            current_stack = [next_path]
+        elif step_type == "navigation.back":
+            delta = max(1, int(payload.get("delta", 1)))
+            if len(current_stack) > 1:
+                current_stack = current_stack[: max(1, len(current_stack) - delta)]
+            next_path = current_stack[-1]
+
+        state["page_stack"] = current_stack
+        return next_path, {
+            "url": payload.get("url"),
+            "delta": int(payload.get("delta", 1)),
+            "pagePath": next_path,
+        }
+
+    def _apply_placeholder_page_transition(
+        self,
+        state: dict[str, Any],
+        *,
+        current_page_path: str,
+        next_page_path: str,
+        mode: str,
+    ) -> str:
+        current_stack = self._sync_placeholder_page_stack(state, current_page_path)
+        normalized_next = self._normalize_page_path(next_page_path)
+
+        if mode == "replace":
+            if current_stack:
+                current_stack[-1] = normalized_next
+            else:
+                current_stack = [normalized_next]
+        elif mode == "reset":
+            current_stack = [normalized_next]
+        else:
+            if not current_stack or current_stack[-1] != normalized_next:
+                current_stack.append(normalized_next)
+
+        state["page_stack"] = current_stack
+        return normalized_next
+
+    def _sync_placeholder_page_stack(
+        self,
+        state: dict[str, Any],
+        current_page_path: str | None,
+    ) -> list[str]:
+        normalized_current = self._normalize_page_path(current_page_path)
+        current_stack = [self._normalize_page_path(path) for path in list(state.get("page_stack") or [])]
+
+        if not current_stack:
+            current_stack = [normalized_current]
+        elif current_stack[-1] != normalized_current:
+            if normalized_current in current_stack:
+                current_stack = current_stack[: current_stack.index(normalized_current) + 1]
+            else:
+                current_stack.append(normalized_current)
+
+        state["page_stack"] = current_stack
+        return current_stack
+
+    def _build_bridge_request(self, step_type: str, payload: dict[str, Any]) -> tuple[str, Any]:
+        if step_type == "storage.set":
+            return "setStorageSync", {"key": payload["key"], "data": payload["value"]}
+        if step_type == "storage.get":
+            return "getStorageSync", {"key": payload["key"]}
+        if step_type == "storage.info":
+            return "getStorageInfoSync", {}
+        if step_type == "storage.remove":
+            return "removeStorageSync", {"key": payload["key"]}
+        if step_type == "storage.clear":
+            return "clearStorageSync", {}
+        if step_type == "app.getLaunchOptions":
+            return "getLaunchOptionsSync", {}
+        if step_type == "app.getSystemInfo":
+            return "getSystemInfoSync", {}
+        if step_type == "app.getAccountInfo":
+            return "getAccountInfoSync", {}
+        if step_type == "settings.get":
+            return "getSetting", {}
+        if step_type == "settings.authorize":
+            return "authorize", {"scope": payload["scope"]}
+        if step_type == "settings.open":
+            return "openSetting", {}
+        if step_type == "clipboard.set":
+            return "setClipboardData", {"data": payload["text"]}
+        if step_type == "clipboard.get":
+            return "getClipboardData", {}
+        if step_type == "ui.showToast":
+            return "showToast", self._compact_dict(
+                {
+                    "title": payload["title"],
+                    "icon": payload.get("icon"),
+                    "duration": payload.get("duration"),
+                    "mask": payload.get("mask"),
+                }
+            )
+        if step_type == "ui.hideToast":
+            return "hideToast", {}
+        if step_type == "ui.showLoading":
+            return "showLoading", self._compact_dict({"title": payload["title"], "mask": payload.get("mask")})
+        if step_type == "ui.hideLoading":
+            return "hideLoading", {}
+        if step_type == "ui.showModal":
+            return "showModal", self._compact_dict(
+                {
+                    "title": payload["title"],
+                    "content": payload["content"],
+                    "showCancel": payload.get("showCancel"),
+                    "confirmText": payload.get("confirmText"),
+                    "cancelText": payload.get("cancelText"),
+                }
+            )
+        if step_type == "ui.showActionSheet":
+            return "showActionSheet", {"itemList": payload["itemList"]}
+        if step_type == "location.get":
+            return "getLocation", self._compact_dict({"type": payload.get("type"), "altitude": payload.get("altitude")})
+        if step_type == "location.choose":
+            return "chooseLocation", {}
+        if step_type == "location.open":
+            return "openLocation", self._compact_dict(
+                {
+                    "latitude": payload["latitude"],
+                    "longitude": payload["longitude"],
+                    "name": payload.get("name"),
+                    "address": payload.get("address"),
+                    "scale": payload.get("scale"),
+                }
+            )
+        if step_type == "media.chooseImage":
+            return "chooseImage", self._compact_dict(
+                {
+                    "count": payload.get("count"),
+                    "sizeType": payload.get("sizeType"),
+                    "sourceType": payload.get("sourceType"),
+                }
+            )
+        if step_type == "media.chooseMedia":
+            return "chooseMedia", self._compact_dict(
+                {
+                    "count": payload.get("count"),
+                    "mediaType": payload.get("mediaType"),
+                    "sourceType": payload.get("sourceType"),
+                }
+            )
+        if step_type == "media.takePhoto":
+            return "chooseMedia", {"count": 1, "mediaType": ["image"], "sourceType": ["camera"]}
+        if step_type == "media.getImageInfo":
+            return "getImageInfo", {"src": payload["src"]}
+        if step_type == "media.saveImageToPhotosAlbum":
+            return "saveImageToPhotosAlbum", {"filePath": payload["filePath"]}
+        if step_type == "file.upload":
+            return "uploadFile", self._compact_dict(
+                {
+                    "url": payload["url"],
+                    "filePath": payload["filePath"],
+                    "name": payload["name"],
+                    "formData": payload.get("formData"),
+                }
+            )
+        if step_type == "file.download":
+            return "downloadFile", {"url": payload["url"]}
+        if step_type == "device.scanCode":
+            return "scanCode", self._compact_dict(
+                {
+                    "onlyFromCamera": payload.get("onlyFromCamera"),
+                    "scanType": payload.get("scanType"),
+                }
+            )
+        if step_type == "device.makePhoneCall":
+            return "makePhoneCall", {"phoneNumber": payload["phoneNumber"]}
+        if step_type == "auth.login":
+            return "login", {}
+        if step_type == "auth.checkSession":
+            return "checkSession", {}
+        if step_type == "subscription.requestMessage":
+            return "requestSubscribeMessage", {"tmplIds": payload["tmplIds"]}
+        raise CliExecutionError(
+            error_code=ErrorCode.PLAN_ERROR,
+            message=t("error.step_not_implemented", step_type=step_type),
+            details={"step_type": step_type},
+        )
+
+    @staticmethod
+    def _bridge_method_name(step_type: str) -> str:
+        bridge_methods = {
+            "storage.set": "setStorageSync",
+            "storage.get": "getStorageSync",
+            "storage.info": "getStorageInfoSync",
+            "storage.remove": "removeStorageSync",
+            "storage.clear": "clearStorageSync",
+            "navigation.navigateTo": "navigateTo",
+            "navigation.redirectTo": "redirectTo",
+            "navigation.reLaunch": "reLaunch",
+            "navigation.switchTab": "switchTab",
+            "navigation.back": "navigateBack",
+            "app.getLaunchOptions": "getLaunchOptionsSync",
+            "app.getSystemInfo": "getSystemInfoSync",
+            "app.getAccountInfo": "getAccountInfoSync",
+            "settings.get": "getSetting",
+            "settings.authorize": "authorize",
+            "settings.open": "openSetting",
+            "clipboard.set": "setClipboardData",
+            "clipboard.get": "getClipboardData",
+            "ui.showToast": "showToast",
+            "ui.hideToast": "hideToast",
+            "ui.showLoading": "showLoading",
+            "ui.hideLoading": "hideLoading",
+            "ui.showModal": "showModal",
+            "ui.showActionSheet": "showActionSheet",
+            "location.get": "getLocation",
+            "location.choose": "chooseLocation",
+            "location.open": "openLocation",
+            "media.chooseImage": "chooseImage",
+            "media.chooseMedia": "chooseMedia",
+            "media.takePhoto": "chooseMedia",
+            "media.getImageInfo": "getImageInfo",
+            "media.saveImageToPhotosAlbum": "saveImageToPhotosAlbum",
+            "file.upload": "uploadFile",
+            "file.download": "downloadFile",
+            "device.scanCode": "scanCode",
+            "device.makePhoneCall": "makePhoneCall",
+            "auth.login": "login",
+            "auth.checkSession": "checkSession",
+            "subscription.requestMessage": "requestSubscribeMessage",
+        }
+        return bridge_methods.get(step_type, step_type.split(".", 1)[-1])
+
+    def _placeholder_bridge_state(
+        self,
+        session_metadata: dict[str, Any],
+        current_page_path: str | None,
+    ) -> dict[str, Any]:
+        bridge_state = session_metadata.get("bridge_state")
+        if isinstance(bridge_state, dict):
+            return bridge_state
+        normalized_page = self._normalize_page_path(current_page_path)
+        bridge_state = {
+            "storage": {},
+            "clipboard": "",
+            "settings": {},
+            "ui_state": {"type": None, "title": ""},
+            "page_stack": [normalized_page],
+        }
+        session_metadata["bridge_state"] = bridge_state
+        return bridge_state
+
+    @staticmethod
+    def _compact_dict(payload: dict[str, Any]) -> dict[str, Any]:
+        return {key: value for key, value in payload.items() if value is not None}
+
+    def _extract_bridge_result(self, response: Any) -> Any:
+        outer_result = self._lookup_value(response, "result")
+        if outer_result is None:
+            return self._to_plain_data(response)
+        inner_result = self._lookup_value(outer_result, "result")
+        if inner_result is None:
+            return self._to_plain_data(outer_result)
+        return self._to_plain_data(inner_result)
+
+    @staticmethod
+    def _lookup_value(target: Any, key: str) -> Any:
+        if target is None:
+            return None
+        if isinstance(target, dict):
+            return target.get(key)
+        if hasattr(target, key):
+            return getattr(target, key)
+        return None
+
+    def _to_plain_data(self, value: Any) -> Any:
+        if value is None or isinstance(value, (str, int, float, bool)):
+            return value
+        if isinstance(value, list):
+            return [self._to_plain_data(item) for item in value]
+        if isinstance(value, tuple):
+            return [self._to_plain_data(item) for item in value]
+        if isinstance(value, dict):
+            return {str(key): self._to_plain_data(item) for key, item in value.items()}
+        if hasattr(value, "items") and callable(getattr(value, "items", None)):
+            return {str(key): self._to_plain_data(item) for key, item in value.items()}
+        if hasattr(value, "__dict__"):
+            return {
+                str(key): self._to_plain_data(item)
+                for key, item in vars(value).items()
+                if not str(key).startswith("_")
+            }
+        return str(value)
 
     def perform_gesture(
         self,
@@ -640,6 +1256,8 @@ class MiniumRuntimeAdapter:
         project_path: Path | None,
     ) -> dict[str, Any]:
         """启动真实 Minium 会话。"""
+        project_appid = self._read_project_appid(project_path)
+        uses_tourist_appid = project_appid == "touristappid"
         try:
             from minium import Minium
         except Exception as exc:  # pragma: no cover - 真实依赖路径
@@ -663,18 +1281,30 @@ class MiniumRuntimeAdapter:
             conf["mock_native_modal"] = False
         conf = {key: value for key, value in conf.items() if value is not None}
 
-        try:
-            driver = Minium(conf)
-            app = driver.app
-            if initial_page_path:
-                app.navigate_to(initial_page_path)
-            page = app.get_current_page()
-        except Exception as exc:  # pragma: no cover - 真实依赖路径
-            raise CliExecutionError(
-                error_code=ErrorCode.ENVIRONMENT_ERROR,
-                message=t("error.minium_connect_failed"),
-                details={**environment, "cause": self._format_exception(exc), "mode": mode},
-            ) from exc
+        last_exception: Exception | None = None
+        for attempt in range(1, 4):
+            try:
+                driver = Minium(conf)
+                app = driver.app
+                if initial_page_path:
+                    app.navigate_to(initial_page_path)
+                page = app.get_current_page()
+                break
+            except Exception as exc:  # pragma: no cover - 真实依赖路径
+                last_exception = exc
+                if attempt == 3:
+                    raise CliExecutionError(
+                        error_code=ErrorCode.ENVIRONMENT_ERROR,
+                        message=t("error.minium_connect_failed"),
+                        details={
+                            **environment,
+                            "cause": self._format_exception(exc),
+                            "mode": mode,
+                            "attempts": attempt,
+                        },
+                    ) from exc
+                time.sleep(2)
+                self._prepare_automation_target(project_path=project_path, test_port=self.config.test_port)
 
         return {
             "backend": "minium",
@@ -686,6 +1316,9 @@ class MiniumRuntimeAdapter:
             "runtime_driver": driver,
             "runtime_app": app,
             "test_port": self.config.test_port,
+            "bridge_state": None,
+            "project_appid": project_appid,
+            "uses_tourist_appid": uses_tourist_appid,
         }
 
     def _start_placeholder_session(
@@ -693,18 +1326,31 @@ class MiniumRuntimeAdapter:
         initial_page_path: str | None,
         metadata: dict[str, Any],
         environment: dict[str, str | bool | None],
+        project_path: Path | None = None,
     ) -> dict[str, Any]:
         """启动占位会话。"""
+        page_path = initial_page_path or "pages/index/index"
+        project_appid = self._read_project_appid(project_path)
+        uses_tourist_appid = project_appid == "touristappid"
         return {
             "backend": "placeholder",
             "connected": True,
-            "current_page_path": initial_page_path or "pages/index/index",
+            "current_page_path": self._normalize_page_path(page_path),
             "environment": environment,
             "note": "placeholder-runtime",
             "metadata": metadata,
             "runtime_driver": None,
             "runtime_app": None,
             "test_port": self.config.test_port,
+            "bridge_state": {
+                "storage": {},
+                "clipboard": "",
+                "settings": {},
+                "ui_state": {"type": None, "title": ""},
+                "page_stack": [self._normalize_page_path(page_path)],
+            },
+            "project_appid": project_appid,
+            "uses_tourist_appid": uses_tourist_appid,
         }
 
     @staticmethod
@@ -795,16 +1441,21 @@ class MiniumRuntimeAdapter:
 
     @staticmethod
     def _should_disable_native_modal_mock(project_path: Path | None) -> bool:
+        return MiniumRuntimeAdapter._read_project_appid(project_path) == "touristappid"
+
+    @staticmethod
+    def _read_project_appid(project_path: Path | None) -> str | None:
         if project_path is None:
-            return False
+            return None
         project_config_path = project_path / "project.config.json"
         if not project_config_path.exists():
-            return False
+            return None
         try:
             payload = json.loads(project_config_path.read_text(encoding="utf-8"))
         except Exception:
-            return False
-        return str(payload.get("appid", "")).strip() == "touristappid"
+            return None
+        appid = str(payload.get("appid", "")).strip()
+        return appid or None
 
     def _resolve_real_gesture_target(
         self,
@@ -980,14 +1631,33 @@ class MiniumRuntimeAdapter:
         )
 
     def _dispatch_real_tap_event(self, target: Any) -> None:
+        if callable(getattr(target, "click", None)):
+            target.click()
+            return
+        if callable(getattr(target, "tap", None)):
+            target.tap()
+            return
         if callable(getattr(target, "trigger", None)):
-            target.trigger("tap", {})
-            return
+            for event_name in ("tap", "click"):
+                try:
+                    target.trigger(event_name, {})
+                    return
+                except Exception:
+                    continue
         if callable(getattr(target, "dispatch_event", None)):
-            target.dispatch_event("tap", detail={})
-            return
+            for event_name in ("tap", "click"):
+                try:
+                    target.dispatch_event(event_name, detail={})
+                    return
+                except Exception:
+                    continue
         if callable(getattr(target, "trigger_events", None)):
-            target.trigger_events([{"type": "tap", "detail": {}, "interval": 0}])
+            target.trigger_events(
+                [
+                    {"type": "tap", "detail": {}, "interval": 0},
+                    {"type": "click", "detail": {}, "interval": 0},
+                ]
+            )
             return
 
     @staticmethod
@@ -1283,11 +1953,12 @@ class MiniumRuntimeAdapter:
 
     @staticmethod
     def _placeholder_elements(page_path: str) -> list[dict[str, Any]]:
+        page_path = MiniumRuntimeAdapter._normalize_page_path(page_path)
         if page_path == "pages/home/index":
             return [
                 {
                     "id": "home-title",
-                    "text": "Home",
+                    "text": "Demo Home",
                     "visible": True,
                     "enabled": True,
                     "editable": False,
@@ -1305,17 +1976,90 @@ class MiniumRuntimeAdapter:
                     "center_y": 150,
                     "selector": "#search-input",
                 },
+                {
+                    "id": "home-to-bridge-lab-button",
+                    "text": "Open the bridge lab",
+                    "visible": True,
+                    "enabled": True,
+                    "editable": False,
+                    "center_x": 180,
+                    "center_y": 240,
+                    "selector": "#home-to-bridge-lab-button",
+                },
+            ]
+        if page_path == "pages/bridge-lab/index":
+            return [
+                {
+                    "id": "bridge-lab-title",
+                    "text": "Bridge Lab",
+                    "visible": True,
+                    "enabled": True,
+                    "editable": False,
+                    "center_x": 180,
+                    "center_y": 84,
+                    "selector": "#bridge-lab-title",
+                },
+                {
+                    "id": "bridge-high-priority-summary",
+                    "text": "Storage, navigation, app context, settings, clipboard, toast, and loading plans start here.",
+                    "visible": True,
+                    "enabled": True,
+                    "editable": False,
+                    "center_x": 180,
+                    "center_y": 184,
+                    "selector": "#bridge-high-priority-summary",
+                },
+                {
+                    "id": "bridge-medium-priority-summary",
+                    "text": "Location, media, file, device, auth, and session flows are demonstrated with a placeholder-safe plan.",
+                    "visible": True,
+                    "enabled": True,
+                    "editable": False,
+                    "center_x": 180,
+                    "center_y": 284,
+                    "selector": "#bridge-medium-priority-summary",
+                },
+                {
+                    "id": "bridge-touristappid-note",
+                    "text": "Plans that require a developer-owned AppID should be skipped automatically when the demo project still uses touristappid.",
+                    "visible": True,
+                    "enabled": True,
+                    "editable": False,
+                    "center_x": 180,
+                    "center_y": 384,
+                    "selector": "#bridge-touristappid-note",
+                },
+                {
+                    "id": "bridge-to-home-button",
+                    "text": "Open the home page",
+                    "visible": True,
+                    "enabled": True,
+                    "editable": False,
+                    "center_x": 180,
+                    "center_y": 484,
+                    "selector": "#bridge-to-home-button",
+                },
             ]
         return [
             {
                 "id": "login-button",
-                "text": "Login",
+                "text": "WeChat Login",
                 "visible": True,
                 "enabled": True,
                 "editable": False,
                 "center_x": 180,
                 "center_y": 240,
                 "selector": "#login-button",
+            },
+            {
+                "id": "login-title",
+                "text": "Demo Login",
+                "visible": True,
+                "enabled": True,
+                "editable": False,
+                "center_x": 160,
+                "center_y": 80,
+                "selector": "#login-title",
             },
             {
                 "id": "username-input",

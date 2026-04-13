@@ -18,6 +18,45 @@ export const SUPPORTED_STEP_TYPES = Object.freeze([
   "gesture.touchMove",
   "gesture.touchTap",
   "gesture.touchEnd",
+  "storage.set",
+  "storage.get",
+  "storage.info",
+  "storage.remove",
+  "storage.clear",
+  "navigation.navigateTo",
+  "navigation.redirectTo",
+  "navigation.reLaunch",
+  "navigation.switchTab",
+  "navigation.back",
+  "app.getLaunchOptions",
+  "app.getSystemInfo",
+  "app.getAccountInfo",
+  "settings.get",
+  "settings.authorize",
+  "settings.open",
+  "clipboard.set",
+  "clipboard.get",
+  "ui.showToast",
+  "ui.hideToast",
+  "ui.showLoading",
+  "ui.hideLoading",
+  "ui.showModal",
+  "ui.showActionSheet",
+  "location.get",
+  "location.choose",
+  "location.open",
+  "media.chooseImage",
+  "media.chooseMedia",
+  "media.takePhoto",
+  "media.getImageInfo",
+  "media.saveImageToPhotosAlbum",
+  "file.upload",
+  "file.download",
+  "device.scanCode",
+  "device.makePhoneCall",
+  "auth.login",
+  "auth.checkSession",
+  "subscription.requestMessage",
   "artifact.screenshot",
   "session.close",
 ] as const);
@@ -87,6 +126,70 @@ export interface LoadedPlan {
   plan: Plan;
   path: string;
 }
+
+const NO_INPUT_REQUIRED_STEP_TYPES = new Set<SupportedStepType>([
+  "page.read",
+  "storage.info",
+  "storage.clear",
+  "app.getLaunchOptions",
+  "app.getSystemInfo",
+  "app.getAccountInfo",
+  "settings.get",
+  "settings.open",
+  "clipboard.get",
+  "ui.hideToast",
+  "ui.hideLoading",
+  "location.get",
+  "location.choose",
+  "media.chooseImage",
+  "media.chooseMedia",
+  "media.takePhoto",
+  "device.scanCode",
+  "auth.login",
+  "auth.checkSession",
+]);
+
+const BRIDGE_STEP_TYPES = new Set<SupportedStepType>([
+  "storage.set",
+  "storage.get",
+  "storage.info",
+  "storage.remove",
+  "storage.clear",
+  "navigation.navigateTo",
+  "navigation.redirectTo",
+  "navigation.reLaunch",
+  "navigation.switchTab",
+  "navigation.back",
+  "app.getLaunchOptions",
+  "app.getSystemInfo",
+  "app.getAccountInfo",
+  "settings.get",
+  "settings.authorize",
+  "settings.open",
+  "clipboard.set",
+  "clipboard.get",
+  "ui.showToast",
+  "ui.hideToast",
+  "ui.showLoading",
+  "ui.hideLoading",
+  "ui.showModal",
+  "ui.showActionSheet",
+  "location.get",
+  "location.choose",
+  "location.open",
+  "media.chooseImage",
+  "media.chooseMedia",
+  "media.takePhoto",
+  "media.getImageInfo",
+  "media.saveImageToPhotosAlbum",
+  "file.upload",
+  "file.download",
+  "device.scanCode",
+  "device.makePhoneCall",
+  "auth.login",
+  "auth.checkSession",
+  "subscription.requestMessage",
+]);
 
 export class PlanValidationError extends Error {
   readonly details: string[];
@@ -223,9 +326,16 @@ export function validatePlan(
       if (!SUPPORTED_STEP_TYPES.includes(step.type as SupportedStepType)) {
         errors.push(`steps[${index}] uses an unsupported type: ${JSON.stringify(step.type)}`);
       }
-      if (!step.input || typeof step.input !== "object" || Array.isArray(step.input)) {
+      const supportedStepType = step.type as SupportedStepType;
+      if (
+        !NO_INPUT_REQUIRED_STEP_TYPES.has(supportedStepType) &&
+        (!step.input || typeof step.input !== "object" || Array.isArray(step.input))
+      ) {
         errors.push(`steps[${index}] must include an object input.`);
         continue;
+      }
+      if (!step.input || typeof step.input !== "object" || Array.isArray(step.input)) {
+        step.input = {};
       }
       validateStepShape(step, index, typedPlan, errors);
     }
@@ -242,6 +352,8 @@ export function validatePlan(
 }
 
 function validateStepShape(step: PlanStep, index: number, plan: Partial<Plan>, errors: string[]): void {
+  validateBridgeCommonShape(step, index, errors);
+
   switch (step.type) {
     case "session.start": {
       const effectiveProjectPath =
@@ -299,7 +411,133 @@ function validateStepShape(step: PlanStep, index: number, plan: Partial<Plan>, e
       }
       break;
     }
+    case "storage.set": {
+      requireStringField(step, index, "key", errors);
+      if (!Object.prototype.hasOwnProperty.call(step.input, "value")) {
+        errors.push(`steps[${index}] storage.set requires a value field.`);
+      }
+      break;
+    }
+    case "storage.get":
+    case "storage.remove": {
+      requireStringField(step, index, "key", errors);
+      break;
+    }
+    case "navigation.navigateTo":
+    case "navigation.redirectTo":
+    case "navigation.reLaunch":
+    case "navigation.switchTab": {
+      requireStringField(step, index, "url", errors);
+      requireOptionalNumberField(step, index, "timeoutMs", errors);
+      break;
+    }
+    case "navigation.back": {
+      requireOptionalNumberField(step, index, "delta", errors);
+      requireOptionalNumberField(step, index, "timeoutMs", errors);
+      break;
+    }
+    case "settings.authorize": {
+      requireStringField(step, index, "scope", errors);
+      break;
+    }
+    case "clipboard.set": {
+      requireStringField(step, index, "text", errors);
+      break;
+    }
+    case "ui.showToast": {
+      requireStringField(step, index, "title", errors);
+      requireOptionalNumberField(step, index, "duration", errors);
+      break;
+    }
+    case "ui.showLoading": {
+      requireStringField(step, index, "title", errors);
+      break;
+    }
+    case "ui.showModal": {
+      requireStringField(step, index, "title", errors);
+      requireStringField(step, index, "content", errors);
+      break;
+    }
+    case "ui.showActionSheet": {
+      if (!Array.isArray(step.input.itemList) || step.input.itemList.length === 0) {
+        errors.push(`steps[${index}] ui.showActionSheet requires a non-empty itemList array.`);
+      } else if (step.input.itemList.some((item) => typeof item !== "string" || item.trim() === "")) {
+        errors.push(`steps[${index}] ui.showActionSheet itemList must contain non-empty strings.`);
+      }
+      break;
+    }
+    case "location.open": {
+      requireNumberField(step, index, "latitude", errors);
+      requireNumberField(step, index, "longitude", errors);
+      break;
+    }
+    case "media.getImageInfo": {
+      requireStringField(step, index, "src", errors);
+      break;
+    }
+    case "media.saveImageToPhotosAlbum": {
+      requireStringField(step, index, "filePath", errors);
+      break;
+    }
+    case "file.upload": {
+      requireStringField(step, index, "url", errors);
+      requireStringField(step, index, "filePath", errors);
+      requireStringField(step, index, "name", errors);
+      break;
+    }
+    case "file.download": {
+      requireStringField(step, index, "url", errors);
+      break;
+    }
+    case "device.makePhoneCall": {
+      requireStringField(step, index, "phoneNumber", errors);
+      break;
+    }
+    case "subscription.requestMessage": {
+      if (!Array.isArray(step.input.tmplIds) || step.input.tmplIds.length === 0) {
+        errors.push(`steps[${index}] subscription.requestMessage requires a non-empty tmplIds array.`);
+      } else if (step.input.tmplIds.some((item) => typeof item !== "string" || item.trim() === "")) {
+        errors.push(`steps[${index}] subscription.requestMessage tmplIds must contain non-empty strings.`);
+      }
+      break;
+    }
     default:
       break;
+  }
+}
+
+function validateBridgeCommonShape(step: PlanStep, index: number, errors: string[]): void {
+  if (!BRIDGE_STEP_TYPES.has(step.type as SupportedStepType)) {
+    return;
+  }
+  if (
+    step.input.requiresDeveloperAppId !== undefined &&
+    typeof step.input.requiresDeveloperAppId !== "boolean"
+  ) {
+    errors.push(`steps[${index}] ${step.type} requiresDeveloperAppId must be a boolean when provided.`);
+  }
+  if (step.input.skipReason !== undefined && typeof step.input.skipReason !== "string") {
+    errors.push(`steps[${index}] ${step.type} skipReason must be a string when provided.`);
+  }
+  if (step.input.timeoutMs !== undefined && typeof step.input.timeoutMs !== "number") {
+    errors.push(`steps[${index}] ${step.type} timeoutMs must be numeric when provided.`);
+  }
+}
+
+function requireStringField(step: PlanStep, index: number, fieldName: string, errors: string[]): void {
+  if (typeof step.input[fieldName] !== "string" || !String(step.input[fieldName]).trim()) {
+    errors.push(`steps[${index}] ${step.type} requires a non-empty string ${fieldName} value.`);
+  }
+}
+
+function requireNumberField(step: PlanStep, index: number, fieldName: string, errors: string[]): void {
+  if (typeof step.input[fieldName] !== "number" || !Number.isFinite(step.input[fieldName])) {
+    errors.push(`steps[${index}] ${step.type} requires a numeric ${fieldName} value.`);
+  }
+}
+
+function requireOptionalNumberField(step: PlanStep, index: number, fieldName: string, errors: string[]): void {
+  if (step.input[fieldName] !== undefined) {
+    requireNumberField(step, index, fieldName, errors);
   }
 }

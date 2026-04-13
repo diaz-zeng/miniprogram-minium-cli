@@ -47,6 +47,10 @@ class SessionService:
                 "runtime_app": runtime_state.get("runtime_app"),
                 "runtime_note": runtime_state.get("note"),
                 "test_port": runtime_state.get("test_port"),
+                "bridge_state": runtime_state.get("bridge_state"),
+                "project_appid": runtime_state.get("project_appid"),
+                "uses_tourist_appid": runtime_state.get("uses_tourist_appid", False),
+                "project_path": str(self._resolve_project_path(project_path)) if project_path else None,
             }
         )
         session.current_page_path = runtime_state["current_page_path"]
@@ -60,6 +64,8 @@ class SessionService:
             "runtime_backend": runtime_state["backend"],
             "runtime_note": runtime_state.get("note"),
             "test_port": runtime_state.get("test_port"),
+            "project_appid": runtime_state.get("project_appid"),
+            "uses_tourist_appid": runtime_state.get("uses_tourist_appid", False),
         }
 
     def close_session(self, session_id: str) -> dict[str, Any]:

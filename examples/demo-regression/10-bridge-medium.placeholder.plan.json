@@ -1,0 +1,140 @@
+{
+  "version": 1,
+  "kind": "miniapp-test-plan",
+  "metadata": {
+    "name": "demo-bridge-medium-placeholder",
+    "draft": false
+  },
+  "environment": {
+    "projectPath": "../demo-miniapp",
+    "wechatDevtoolPath": null,
+    "testPort": 9420,
+    "language": "en-US",
+    "runtimeMode": "placeholder"
+  },
+  "execution": {
+    "mode": "serial",
+    "failFast": true
+  },
+  "steps": [
+    {
+      "id": "step-1",
+      "type": "session.start",
+      "input": {
+        "projectPath": "../demo-miniapp",
+        "initialPagePath": "/pages/bridge-lab/index"
+      }
+    },
+    {
+      "id": "step-2",
+      "type": "assert.elementText",
+      "input": {
+        "locator": {
+          "type": "id",
+          "value": "bridge-medium-priority-summary"
+        },
+        "expectedText": "Location, media, file, device, auth, and session flows are demonstrated with a placeholder-safe plan."
+      }
+    },
+    {
+      "id": "step-3",
+      "type": "location.open",
+      "input": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "name": "Bridge Lab",
+        "address": "Beijing demo"
+      }
+    },
+    {
+      "id": "step-4",
+      "type": "media.chooseImage",
+      "input": {
+        "count": 1,
+        "sourceType": [
+          "album"
+        ]
+      }
+    },
+    {
+      "id": "step-5",
+      "type": "media.chooseMedia",
+      "input": {
+        "count": 1,
+        "mediaType": [
+          "image"
+        ],
+        "sourceType": [
+          "camera"
+        ]
+      }
+    },
+    {
+      "id": "step-6",
+      "type": "media.takePhoto",
+      "input": {}
+    },
+    {
+      "id": "step-7",
+      "type": "media.getImageInfo",
+      "input": {
+        "src": "/tmp/bridge-demo.png"
+      }
+    },
+    {
+      "id": "step-8",
+      "type": "media.saveImageToPhotosAlbum",
+      "input": {
+        "filePath": "/tmp/bridge-demo.png"
+      }
+    },
+    {
+      "id": "step-9",
+      "type": "file.upload",
+      "input": {
+        "url": "https://example.com/upload",
+        "filePath": "/tmp/bridge-demo.png",
+        "name": "artifact"
+      }
+    },
+    {
+      "id": "step-10",
+      "type": "file.download",
+      "input": {
+        "url": "https://example.com/bridge-demo.png"
+      }
+    },
+    {
+      "id": "step-11",
+      "type": "device.scanCode",
+      "input": {
+        "onlyFromCamera": false,
+        "scanType": [
+          "qrCode"
+        ]
+      }
+    },
+    {
+      "id": "step-12",
+      "type": "device.makePhoneCall",
+      "input": {
+        "phoneNumber": "1234567890"
+      }
+    },
+    {
+      "id": "step-13",
+      "type": "auth.login",
+      "input": {}
+    },
+    {
+      "id": "step-14",
+      "type": "auth.checkSession",
+      "input": {}
+    },
+    {
+      "id": "step-15",
+      "type": "session.close",
+      "input": {}
+    }
+  ]
+}

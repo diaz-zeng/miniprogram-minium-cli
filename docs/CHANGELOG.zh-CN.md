@@ -8,6 +8,23 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-04-13
+
+### Added
+
+- 新增结构化 miniapp bridge actions，覆盖存储、路由、应用上下文、设置、剪贴板、反馈 UI、位置、媒体、文件、设备、鉴权与订阅消息等能力域。
+- 在 `examples/demo-miniapp/src/pages/bridge-lab/` 中新增 bridge 专用示例页面，并新增 `09-bridge-high-priority.exact.plan.json`、`10-bridge-medium.placeholder.plan.json`、`11-bridge-tourist-skip.exact.plan.json` 三个随仓库回归计划。
+- 为 `add-miniapp-bridge-actions` 新增验收跟踪清单 `openspec/changes/add-miniapp-bridge-actions/acceptance-checklist.md`。
+
+### Changed
+
+- 本地开发环境已从 `npm` 切换到 `pnpm`，相关仓库脚本、锁文件与安装文档已同步更新。
+- bridge 执行链路在真实 Minium 会话启动阶段增加了重试逻辑，用于降低验收运行中的 `session.start` 偶发失败。
+- 真实运行时下的 tap 手势派发已增强，`gesture` 示例页中的点击状态更新更稳定。
+- placeholder 运行时在查询示例页面元素前会先规范化初始页面路径，使 placeholder bridge 断言与随仓库计划保持一致。
+- bridge lab 页面中的 tourist AppID 提示已改为渲染纯文本 `touristappid`，避免真实运行时断言与回归计划文案不一致。
+- 已完成全部随仓库 demo regression plan 的验收验证，其中受限 bridge 跳过场景额外补充了一次 `touristappid` 专项验证。
+
 ## [1.1.0] - 2026-04-08
 
 ### Added

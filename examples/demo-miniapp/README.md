@@ -17,19 +17,19 @@ It is designed to validate:
 
 ```bash
 cd examples/demo-miniapp
-npm install
+pnpm install
 ```
 
 ## Build For WeChat Mini Program
 
 ```bash
-npm run build:weapp
+pnpm run build:weapp
 ```
 
 For iterative local verification:
 
 ```bash
-npm run dev:weapp
+pnpm run dev:weapp
 ```
 
 After the build is ready, open the project root in WeChat DevTools. The `project.config.json` file points `miniprogramRoot` to `dist/`.

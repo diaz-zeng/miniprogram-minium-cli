@@ -32,6 +32,46 @@ test("validatePlan rejects unsupported step type", () => {
   assert.match(validation.errors.join("\n"), /unsupported/);
 });
 
+test("validatePlan accepts supported bridge step types", () => {
+  const validation = validatePlan({
+    version: PLAN_VERSION,
+    kind: PLAN_KIND,
+    metadata: { draft: false, name: "bridge-demo" },
+    execution: { mode: "serial", failFast: true },
+    environment: {
+      projectPath: "/tmp/demo-miniapp",
+      artifactsDir: null,
+      wechatDevtoolPath: null,
+      testPort: 9420,
+      language: "en",
+    },
+    steps: [
+      {
+        id: "step-1",
+        type: "session.start",
+        input: { projectPath: "/tmp/demo-miniapp" },
+      },
+      {
+        id: "step-2",
+        type: "storage.set",
+        input: { key: "demo-key", value: "demo-value" },
+      },
+      {
+        id: "step-3",
+        type: "navigation.navigateTo",
+        input: { url: "/pages/bridge-lab/index" },
+      },
+      {
+        id: "step-4",
+        type: "subscription.requestMessage",
+        input: { tmplIds: ["tmpl-demo"] },
+      },
+    ],
+  });
+
+  assert.equal(validation.ok, true);
+});
+
 test("loadPlanFromFile resolves relative environment paths from the plan directory", () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "minium-cli-plan-relative-"));
   const nestedDir = path.join(tempDir, "plans");

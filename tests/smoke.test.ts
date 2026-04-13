@@ -173,6 +173,151 @@ test("failed placeholder assertion produces skipped steps and evidence", async (
   assert.ok(fs.existsSync(String(artifacts.comparisonPath)));
 });
 
+test("placeholder bridge actions pass end-to-end and expose structured outputs", async () => {
+  const artifactsDir = createArtifactsDir("minium-cli-bridge");
+  const plan: Plan = {
+    ...createBasePlan(artifactsDir),
+    metadata: {
+      name: "bridge-smoke",
+      draft: false,
+    },
+    steps: [
+      { id: "step-1", type: "session.start", input: { projectPath: "." } },
+      { id: "step-2", type: "storage.set", input: { key: "bridge-key", value: "bridge-value" } },
+      { id: "step-3", type: "storage.get", input: { key: "bridge-key" } },
+      { id: "step-4", type: "clipboard.set", input: { text: "clipboard-demo" } },
+      { id: "step-5", type: "clipboard.get", input: {} },
+      { id: "step-6", type: "navigation.navigateTo", input: { url: "/pages/bridge-lab/index" } },
+      { id: "step-7", type: "app.getLaunchOptions", input: {} },
+      { id: "step-8", type: "session.close", input: {} },
+    ],
+  };
+
+  const execution = await executePlanWithPython(plan);
+  assert.equal(execution.response.ok, true);
+  const result = execution.response.result as Record<string, unknown>;
+  const summary = result.summary as Record<string, unknown>;
+  const stepResults = result.stepResults as Array<Record<string, unknown>>;
+
+  assert.equal(summary.status, "passed");
+  assert.equal(summary.failedCount, 0);
+  assert.equal(summary.skippedCount, 0);
+  assert.equal(stepResults[2]?.status, "passed");
+  assert.equal(
+    (((stepResults[2]?.output as Record<string, unknown>).result as Record<string, unknown>).value),
+    "bridge-value",
+  );
+  assert.equal(
+    (((stepResults[4]?.output as Record<string, unknown>).result as Record<string, unknown>).text),
+    "clipboard-demo",
+  );
+  assert.equal(
+    (((stepResults[5]?.output as Record<string, unknown>).result as Record<string, unknown>).pagePath),
+    "pages/bridge-lab/index",
+  );
+});
+
+test("placeholder navigation.back respects page history after UI-driven transitions", async () => {
+  const artifactsDir = createArtifactsDir("minium-cli-nav-stack");
+  const plan: Plan = {
+    ...createBasePlan(artifactsDir),
+    metadata: {
+      name: "nav-stack-smoke",
+      draft: false,
+    },
+    steps: [
+      { id: "step-1", type: "session.start", input: { projectPath: "." } },
+      { id: "step-2", type: "element.click", input: { locator: { type: "id", value: "login-button" } } },
+      { id: "step-3", type: "element.click", input: { locator: { type: "id", value: "home-to-bridge-lab-button" } } },
+      { id: "step-4", type: "navigation.back", input: {} },
+      { id: "step-5", type: "assert.pagePath", input: { expectedPath: "pages/home/index" } },
+      { id: "step-6", type: "session.close", input: {} },
+    ],
+  };
+
+  const execution = await executePlanWithPython(plan);
+  assert.equal(execution.response.ok, true);
+  const result = execution.response.result as Record<string, unknown>;
+  const summary = result.summary as Record<string, unknown>;
+  const stepResults = result.stepResults as Array<Record<string, unknown>>;
+
+  assert.equal(summary.status, "passed");
+  assert.equal(stepResults[3]?.status, "passed");
+  assert.equal(
+    (((stepResults[3]?.output as Record<string, unknown>).result as Record<string, unknown>).pagePath),
+    "pages/home/index",
+  );
+});
+
+test("touristappid restricted bridge actions are skipped with a structured reason", async () => {
+  const workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), "minium-cli-tourist-"));
+  const projectPath = path.join(workspaceDir, "miniapp");
+  const artifactsDir = path.join(workspaceDir, "artifacts");
+
+  fs.mkdirSync(projectPath, { recursive: true });
+  fs.writeFileSync(
+    path.join(projectPath, "project.config.json"),
+    JSON.stringify({ appid: "touristappid" }, null, 2),
+    "utf8",
+  );
+
+  const plan: Plan = {
+    ...createBasePlan(artifactsDir),
+    metadata: {
+      name: "tourist-skip-smoke",
+      draft: false,
+    },
+    environment: {
+      projectPath,
+      artifactsDir,
+      wechatDevtoolPath: null,
+      testPort: 9420,
+      language: "en-US",
+      runtimeMode: "placeholder",
+    },
+    steps: [
+      { id: "step-1", type: "session.start", input: { projectPath } },
+      {
+        id: "step-2",
+        type: "settings.authorize",
+        input: {
+          scope: "scope.userLocation",
+          requiresDeveloperAppId: true,
+          skipReason: "Authorization flows require a developer-owned AppID.",
+        },
+      },
+      {
+        id: "step-3",
+        type: "subscription.requestMessage",
+        input: {
+          tmplIds: ["tmpl-demo"],
+          requiresDeveloperAppId: true,
+        },
+      },
+      { id: "step-4", type: "session.close", input: {} },
+    ],
+  };
+
+  const execution = await executePlanWithPython(plan);
+  assert.equal(execution.response.ok, true);
+  const result = execution.response.result as Record<string, unknown>;
+  const summary = result.summary as Record<string, unknown>;
+  const stepResults = result.stepResults as Array<Record<string, unknown>>;
+  const skipped = summary.skipped as Array<Record<string, unknown>>;
+
+  assert.equal(summary.status, "passed");
+  assert.equal(summary.failedCount, 0);
+  assert.equal(summary.skippedCount, 2);
+  assert.equal(stepResults[1]?.status, "skipped");
+  assert.equal(stepResults[2]?.status, "skipped");
+  assert.equal(
+    (stepResults[1]?.output as Record<string, unknown>).skip_reason,
+    "Authorization flows require a developer-owned AppID.",
+  );
+  assert.equal(Array.isArray(skipped), true);
+  assert.equal(skipped.length, 2);
+});
+
 test("real runtime session preparation launches automation target before attaching", async () => {
   const workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), "minium-cli-real-"));
   const fakeModuleDir = path.join(workspaceDir, "fake-python");
@@ -452,6 +597,130 @@ test("real runtime multi-touch gestures dispatch through element targets", async
   assert.equal(stepResults[1]?.status, "passed");
   assert.equal(stepResults[2]?.status, "passed");
   assert.equal(stepResults[7]?.status, "passed");
+});
+
+test("real async bridge calls preserve millisecond timeout precision", async () => {
+  const workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), "minium-cli-real-async-"));
+  const fakeModuleDir = path.join(workspaceDir, "fake-python");
+  const projectPath = path.join(workspaceDir, "miniapp");
+  const devtoolPath = path.join(workspaceDir, "wechat-devtool");
+  const artifactsDir = path.join(workspaceDir, "artifacts");
+  const testPort = await getAvailablePort();
+
+  fs.mkdirSync(fakeModuleDir, { recursive: true });
+  fs.mkdirSync(projectPath, { recursive: true });
+  fs.writeFileSync(path.join(projectPath, "project.config.json"), "{}\n", "utf8");
+  fs.writeFileSync(
+    path.join(fakeModuleDir, "minium.py"),
+    [
+      "class _Page:",
+      "    def __init__(self):",
+      "        self.path = '/pages/bridge-lab/index'",
+      "        self.renderer = 'webview'",
+      "",
+      "class _App:",
+      "    def __init__(self):",
+      "        self._page = _Page()",
+      "",
+      "    def get_current_page(self):",
+      "        return self._page",
+      "",
+      "    def navigate_to(self, path):",
+      "        self._page.path = path",
+      "        return self._page",
+      "",
+      "    def call_wx_method_async(self, method, payload):",
+      "        self.last_method = method",
+      "        self.last_payload = payload",
+      "        return 'async-message-id'",
+      "",
+      "    def get_async_response(self, message_id, timeout=0):",
+      "        if message_id != 'async-message-id':",
+      "            return None",
+      "        if timeout < 1.5:",
+      "            return None",
+      "        return {'result': {'result': {'confirm': True, 'cancel': False}}}",
+      "",
+      "class Minium:",
+      "    def __init__(self, conf):",
+      "        self.conf = conf",
+      "        self.app = _App()",
+      "",
+      "    def shutdown(self):",
+      "        return None",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  fs.writeFileSync(
+    devtoolPath,
+    [
+      "#!/bin/sh",
+      "PORT=\"\"",
+      "while [ \"$#\" -gt 0 ]; do",
+      "  if [ \"$1\" = \"--auto-port\" ]; then",
+      "    PORT=\"$2\"",
+      "    shift 2",
+      "  else",
+      "    shift",
+      "  fi",
+      "done",
+      "node -e \"const net=require('net'); const port=Number(process.argv[1]); const server=net.createServer(()=>{}); server.listen(port,'127.0.0.1',()=>{}); setTimeout(()=>server.close(()=>process.exit(0)), 15000);\" \"$PORT\" >/dev/null 2>&1 &",
+      "exit 0",
+      "",
+    ].join("\n"),
+    { encoding: "utf8", mode: 0o755 },
+  );
+
+  const plan: Plan = {
+    ...createBasePlan(artifactsDir),
+    metadata: {
+      name: "real-async-timeout-precision",
+      draft: false,
+    },
+    environment: {
+      projectPath,
+      artifactsDir,
+      wechatDevtoolPath: devtoolPath,
+      testPort,
+      language: "en-US",
+      runtimeMode: "real",
+    },
+    steps: [
+      { id: "step-1", type: "session.start", input: { projectPath, initialPagePath: "/pages/bridge-lab/index" } },
+      {
+        id: "step-2",
+        type: "ui.showModal",
+        input: {
+          title: "Bridge confirmation",
+          content: "Keep timeout precision.",
+          timeoutMs: 1500,
+        },
+      },
+      { id: "step-3", type: "session.close", input: {} },
+    ],
+  };
+
+  const execution = await executePlanWithPython(plan, {
+    env: {
+      ...process.env,
+      PYTHONPATH: process.env.PYTHONPATH
+        ? `${fakeModuleDir}${path.delimiter}${process.env.PYTHONPATH}`
+        : fakeModuleDir,
+    },
+  });
+
+  assert.equal(execution.response.ok, true);
+  const result = execution.response.result as Record<string, unknown>;
+  const summary = result.summary as Record<string, unknown>;
+  const stepResults = result.stepResults as Array<Record<string, unknown>>;
+
+  assert.equal(summary.status, "passed");
+  assert.equal(stepResults[1]?.status, "passed");
+  assert.equal(
+    (((stepResults[1]?.output as Record<string, unknown>).result as Record<string, unknown>).confirm),
+    true,
+  );
 });
 
 test("localized runtime failures keep structured fields stable", async () => {
