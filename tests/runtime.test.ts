@@ -16,6 +16,7 @@ import {
   getUvTarget,
   isSupportedPythonVersion,
   parsePythonVersion,
+  promoteInstalledBinary,
 } from "../src/runtime";
 
 test("getCacheBaseDir honors explicit cache env", () => {
@@ -180,4 +181,47 @@ test("buildUvRunArgs builds a managed-python command", () => {
     "-m",
     "miniprogram_minium_cli",
   ]);
+});
+
+test("promoteInstalledBinary moves a staged binary into place", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "minium-cli-promote-"));
+  const stagedPath = path.join(tempDir, "uv.tmp");
+  const targetPath = path.join(tempDir, "uv");
+
+  try {
+    fs.writeFileSync(stagedPath, "staged-binary");
+
+    await promoteInstalledBinary(stagedPath, targetPath);
+
+    assert.equal(fs.existsSync(stagedPath), false);
+    assert.equal(fs.readFileSync(targetPath, "utf8"), "staged-binary");
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("promoteInstalledBinary keeps an existing target when another installer wins the race", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "minium-cli-promote-race-"));
+  const stagedPath = path.join(tempDir, "uv.tmp");
+  const targetPath = path.join(tempDir, "uv");
+  const originalRename = fs.promises.rename;
+
+  fs.promises.rename = (async (_source: fs.PathLike, _target: fs.PathLike) => {
+    const error = new Error("target already exists") as NodeJS.ErrnoException;
+    error.code = "EEXIST";
+    throw error;
+  }) as typeof fs.promises.rename;
+
+  try {
+    fs.writeFileSync(stagedPath, "staged-binary");
+    fs.writeFileSync(targetPath, "ready-binary");
+
+    await promoteInstalledBinary(stagedPath, targetPath);
+
+    assert.equal(fs.existsSync(stagedPath), false);
+    assert.equal(fs.readFileSync(targetPath, "utf8"), "ready-binary");
+  } finally {
+    fs.promises.rename = originalRename;
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
 });
