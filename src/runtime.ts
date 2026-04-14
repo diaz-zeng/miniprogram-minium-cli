@@ -242,6 +242,7 @@ async function installManagedUvBinary(layout: RuntimeLayout, options: RuntimeOpt
   const archivePath = path.join(tmpDir, `uv.${archiveExt}`);
   const extractDir = path.join(tmpDir, "extract");
   const installUrl = buildUvDownloadUrl(triple, archiveExt, options.env || process.env);
+  const stagedTargets = new Set<string>();
 
   try {
     fs.mkdirSync(extractDir, { recursive: true });
@@ -250,21 +251,58 @@ async function installManagedUvBinary(layout: RuntimeLayout, options: RuntimeOpt
     const extractedRoot = path.join(extractDir, `uv-${triple}`);
     const uvSource = path.join(extractedRoot, process.platform === "win32" ? "uv.exe" : "uv");
     const uvxSource = path.join(extractedRoot, process.platform === "win32" ? "uvx.exe" : "uvx");
+    const uvStagedTarget = buildStagedInstallPath(layout.managedUvBinary);
+    stagedTargets.add(uvStagedTarget);
+    await fsp.copyFile(uvSource, uvStagedTarget);
+    if (process.platform !== "win32") {
+      await fsp.chmod(uvStagedTarget, 0o755);
+    }
+    await promoteInstalledBinary(uvStagedTarget, layout.managedUvBinary);
+    stagedTargets.delete(uvStagedTarget);
 
-    await fsp.copyFile(uvSource, layout.managedUvBinary);
     if (fs.existsSync(uvxSource)) {
       const uvxTarget = path.join(layout.uvInstallDir, process.platform === "win32" ? "uvx.exe" : "uvx");
-      await fsp.copyFile(uvxSource, uvxTarget);
+      const uvxStagedTarget = buildStagedInstallPath(uvxTarget);
+      stagedTargets.add(uvxStagedTarget);
+      await fsp.copyFile(uvxSource, uvxStagedTarget);
       if (process.platform !== "win32") {
-        await fsp.chmod(uvxTarget, 0o755);
+        await fsp.chmod(uvxStagedTarget, 0o755);
       }
-    }
-
-    if (process.platform !== "win32") {
-      await fsp.chmod(layout.managedUvBinary, 0o755);
+      await promoteInstalledBinary(uvxStagedTarget, uvxTarget);
+      stagedTargets.delete(uvxStagedTarget);
     }
   } finally {
+    await Promise.all(
+      [...stagedTargets].map(async (target) => {
+        await fsp.rm(target, { force: true }).catch(() => undefined);
+      }),
+    );
     await fsp.rm(tmpDir, { recursive: true, force: true });
+  }
+}
+
+function buildStagedInstallPath(targetPath: string): string {
+  return `${targetPath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function isAlreadyExistsLikeError(error: unknown): error is NodeJS.ErrnoException {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      ["EEXIST", "EPERM", "ENOTEMPTY"].includes(String((error as NodeJS.ErrnoException).code || "")),
+  );
+}
+
+export async function promoteInstalledBinary(stagedPath: string, targetPath: string): Promise<void> {
+  try {
+    await fsp.rename(stagedPath, targetPath);
+  } catch (error) {
+    if (isAlreadyExistsLikeError(error) && fs.existsSync(targetPath)) {
+      await fsp.rm(stagedPath, { force: true }).catch(() => undefined);
+      return;
+    }
+    throw error;
   }
 }
 
