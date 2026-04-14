@@ -32,6 +32,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "prepack": "pnpm run build",
+    "release:assert-unpublished-base": "node scripts/release/assert-unpublished-base-version.mjs",
     "release:compute-prerelease": "node scripts/release/compute-prerelease-version.mjs",
     "release:validate-tag": "node scripts/release/validate-tag-version.mjs",
     "release:stage-package": "node scripts/release/stage-package.mjs",
