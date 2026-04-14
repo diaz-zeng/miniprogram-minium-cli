@@ -20,6 +20,12 @@ Bridge-heavy examples:
 - `examples/demo-regression/10-bridge-medium.placeholder.plan.json`
 - `examples/demo-regression/11-bridge-tourist-skip.exact.plan.json`
 
+Network-focused examples:
+
+- `examples/demo-regression/12-network-observation.placeholder.plan.json`
+- `examples/demo-regression/13-network-failure.placeholder.plan.json`
+- `examples/demo-regression/14-network-transfer.placeholder.plan.json`
+
 ## Core rules
 
 - Use documented top-level fields only.
@@ -29,7 +35,9 @@ Bridge-heavy examples:
   - `--plan-json <json>`
 - Preserve supported step types only; do not invent planner-only or shell-only steps.
 - Distinguish between session/artifact steps, UI steps, bridge-backed steps, and assertion steps.
+- Treat network steps as first-class structured plan steps instead of embedding request logic in ad hoc scripts.
 - For bridge-backed steps, use the documented step families and input shapes from `docs/API_REFERENCE.md`.
+- For network steps, prefer a shared matcher shape so listening, waiting, asserting, and interception all describe the same request in the same way.
 - When a bridge step needs a developer-owned AppID, set `requiresDeveloperAppId: true` and include `skipReason`.
 
 ## Helpful workflow

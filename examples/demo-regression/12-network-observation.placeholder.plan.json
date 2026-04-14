@@ -1,0 +1,130 @@
+{
+  "version": 1,
+  "kind": "miniapp-test-plan",
+  "metadata": {
+    "name": "demo-network-observation-placeholder",
+    "draft": false
+  },
+  "environment": {
+    "projectPath": "../demo-miniapp",
+    "wechatDevtoolPath": null,
+    "testPort": 9420,
+    "language": "en-US",
+    "runtimeMode": "placeholder"
+  },
+  "execution": {
+    "mode": "serial",
+    "failFast": true
+  },
+  "steps": [
+    {
+      "id": "step-1",
+      "type": "session.start",
+      "input": {
+        "projectPath": "../demo-miniapp",
+        "initialPagePath": "/pages/home/index"
+      }
+    },
+    {
+      "id": "step-2",
+      "type": "network.listen.start",
+      "input": {
+        "listenerId": "home-network",
+        "captureResponses": true
+      }
+    },
+    {
+      "id": "step-3",
+      "type": "element.click",
+      "input": {
+        "locator": {
+          "type": "id",
+          "value": "network-login-request-button"
+        }
+      }
+    },
+    {
+      "id": "step-4",
+      "type": "network.wait",
+      "input": {
+        "listenerId": "home-network",
+        "event": "request",
+        "timeoutMs": 1000,
+        "matcher": {
+          "url": "https://service.invalid/api/login",
+          "method": "POST"
+        }
+      }
+    },
+    {
+      "id": "step-5",
+      "type": "assert.networkRequest",
+      "input": {
+        "listenerId": "home-network",
+        "matcher": {
+          "url": "https://service.invalid/api/login",
+          "method": "POST"
+        },
+        "count": 1
+      }
+    },
+    {
+      "id": "step-6",
+      "type": "element.click",
+      "input": {
+        "locator": {
+          "type": "id",
+          "value": "network-reviews-request-button"
+        }
+      }
+    },
+    {
+      "id": "step-7",
+      "type": "network.wait",
+      "input": {
+        "listenerId": "home-network",
+        "event": "response",
+        "timeoutMs": 1000,
+        "matcher": {
+          "url": "https://service.invalid/api/reviews",
+          "method": "GET",
+          "statusCode": 200
+        }
+      }
+    },
+    {
+      "id": "step-8",
+      "type": "assert.networkRequest",
+      "input": {
+        "listenerId": "home-network",
+        "count": 2,
+        "withinMs": 5000
+      }
+    },
+    {
+      "id": "step-9",
+      "type": "assert.networkRequest",
+      "input": {
+        "listenerId": "home-network",
+        "matcher": {
+          "url": "https://service.invalid/api/reviews",
+          "method": "GET"
+        },
+        "count": 1,
+        "orderedAfter": "response-2"
+      }
+    },
+    {
+      "id": "step-10",
+      "type": "network.listen.stop",
+      "input": {
+        "listenerId": "home-network"
+      }
+    },
+    {
+      "id": "step-11",
+      "type": "session.close",
+      "input": {}
+    }
+  ]
+}

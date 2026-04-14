@@ -22,6 +22,14 @@ miniprogram-minium-cli exec --plan ./examples/demo-regression/09-bridge-high-pri
 
 Use the bundled bridge-focused plans when you need a known-good starting point for storage, navigation, app context, settings, clipboard, feedback UI, location, media, file, device, auth, or subscription APIs.
 
+## Network execution examples
+
+```bash
+miniprogram-minium-cli exec --plan ./examples/demo-regression/12-network-observation.placeholder.plan.json --json
+```
+
+Use the bundled network-focused plans when you need a known-good starting point for request observation, filtered assertions, failure injection, mocked responses, or upload/download evidence.
+
 ## Common overrides
 
 ```bash
@@ -45,4 +53,5 @@ miniprogram-minium-cli exec --plan ./path/to/plan.json --json
 - Do not turn the CLI into an ad hoc command runner.
 - Prefer documented overrides over editing plan meaning through unsupported flags.
 - Keep bridge-backed API usage inside the documented step types instead of inventing raw method calls.
+- Keep network observation and interception inside the documented `network.*` and `assert.network*` step types instead of inventing custom runtime glue.
 - When restricted bridge steps depend on a developer-owned AppID, expect `touristappid` runs to skip those steps rather than fail product validation.

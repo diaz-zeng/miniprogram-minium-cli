@@ -395,6 +395,19 @@ async function executeAndReport(plan: Plan, io: CliIo, jsonMode: boolean): Promi
     if (typeof artifacts.comparisonPath === "string") {
       io.stdout.write(`${t(language, "cli.comparison", { path: artifacts.comparisonPath })}\n`);
     }
+    const networkEvents = summary.networkEventCount;
+    const networkSessions = summary.networkSessionCount;
+    if (networkEvents !== undefined && networkSessions !== undefined) {
+      io.stdout.write(
+        `${t(language, "cli.networkSummary", {
+          events: String(networkEvents),
+          sessions: String(networkSessions),
+        })}\n`,
+      );
+    }
+    if (typeof artifacts.networkPath === "string") {
+      io.stdout.write(`${t(language, "cli.networkArtifact", { path: artifacts.networkPath })}\n`);
+    }
     const failure = summary.failure;
     if (failure && typeof failure === "object") {
       const typedFailure = failure as Record<string, unknown>;
