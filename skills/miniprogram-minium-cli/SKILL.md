@@ -36,6 +36,12 @@ Use bridge-backed steps when:
 - the plan needs direct access to miniapp runtime state or host APIs
 - the user wants a structured result object under the step output
 
+Use network steps when:
+
+- the task is to verify whether a UI action or bridge step emitted any request
+- the plan needs URL, method, query, header, body, status, or response-body based filtering
+- the task needs a structured failure, delay, or mocked response instead of a real backend dependency
+
 Read [references/bridge-actions.md](references/bridge-actions.md) before drafting or editing plans that use:
 
 - `storage.*`
@@ -50,6 +56,14 @@ Read [references/bridge-actions.md](references/bridge-actions.md) before draftin
 - `device.*`
 - `auth.*`
 - `subscription.requestMessage`
+
+Read [references/plan-authoring.md](references/plan-authoring.md) before drafting or editing plans that use:
+
+- `network.listen.*`
+- `network.wait`
+- `network.intercept.*`
+- `assert.networkRequest`
+- `assert.networkResponse`
 
 ## Guardrails
 

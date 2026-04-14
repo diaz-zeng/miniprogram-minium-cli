@@ -24,6 +24,9 @@ export default function HomePage() {
   const [formOpen, setFormOpen] = useState(false);
   const [practiceDraft, setPracticeDraft] = useState("12");
   const [saveState, setSaveState] = useState("idle");
+  const [networkState, setNetworkState] = useState("idle");
+  const [networkLastRequest, setNetworkLastRequest] = useState("none");
+  const [networkStatusCode, setNetworkStatusCode] = useState("n/a");
 
   useDidShow(() => {
     const nextSnapshot = getDemoState();
@@ -52,6 +55,31 @@ export default function HomePage() {
       setSaveState("saved");
       setFormOpen(false);
     }, 350);
+  };
+
+  const handleNetworkRequest = async (kind: "login" | "reviews") => {
+    const requestConfig = kind === "login"
+      ? {
+          url: "https://service.invalid/api/login",
+          method: "POST" as const,
+          data: { username: "demo-user" },
+        }
+      : {
+          url: "https://service.invalid/api/reviews?tab=main",
+          method: "GET" as const,
+        };
+    setNetworkState(`pending:${kind}`);
+    setNetworkLastRequest(`${requestConfig.method} ${requestConfig.url}`);
+    setNetworkStatusCode("pending");
+    try {
+      const response = await Taro.request(requestConfig);
+      setNetworkState(`success:${kind}`);
+      setNetworkStatusCode(String(response.statusCode ?? "unknown"));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setNetworkState(`failed:${kind}`);
+      setNetworkStatusCode(message || "failed");
+    }
   };
 
   return (
@@ -113,6 +141,25 @@ export default function HomePage() {
           onClick={() => void Taro.navigateTo({ url: "/pages/review-board/index" })}
         >
           Open the review board
+        </Button>
+      </View>
+
+      <View id="network-card" style={cardStyle}>
+        <Text id="network-card-title">Network Playground</Text>
+        <Text id="network-request-state-text" style={{ marginTop: "12rpx", display: "block" }}>
+          {`Network request state: ${networkState}`}
+        </Text>
+        <Text id="network-last-request-text" style={{ marginTop: "8rpx", display: "block" }}>
+          {`Network last request: ${networkLastRequest}`}
+        </Text>
+        <Text id="network-status-code-text" style={{ marginTop: "8rpx", display: "block" }}>
+          {`Network status code: ${networkStatusCode}`}
+        </Text>
+        <Button id="network-login-request-button" onClick={() => void handleNetworkRequest("login")}>
+          Trigger login request
+        </Button>
+        <Button id="network-reviews-request-button" onClick={() => void handleNetworkRequest("reviews")}>
+          Trigger reviews request
         </Button>
       </View>
 

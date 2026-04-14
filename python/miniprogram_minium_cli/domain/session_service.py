@@ -53,6 +53,7 @@ class SessionService:
                 "project_path": str(self._resolve_project_path(project_path)) if project_path else None,
             }
         )
+        session.metadata["network_state"] = session.network_state
         session.current_page_path = runtime_state["current_page_path"]
         self.repository.update(session)
 
@@ -73,6 +74,7 @@ class SessionService:
         self._cleanup_expired_sessions()
         session = self.require_session(session_id)
         self.runtime_adapter.stop_session(session.metadata)
+        session.metadata.pop("network_state", None)
         self.repository.delete(session.session_id)
         return {
             "session_id": session_id,
@@ -140,6 +142,7 @@ class SessionService:
             if session is None:
                 continue
             self.runtime_adapter.stop_session(session.metadata)
+            session.metadata.pop("network_state", None)
             self.repository.delete(session_id)
             closed_session_ids.append(session_id)
         return closed_session_ids

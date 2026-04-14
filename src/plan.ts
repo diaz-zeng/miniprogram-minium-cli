@@ -11,13 +11,22 @@ export const SUPPORTED_STEP_TYPES = Object.freeze([
   "element.click",
   "element.input",
   "wait.for",
+  "network.listen.start",
+  "network.listen.stop",
+  "network.listen.clear",
+  "network.wait",
   "assert.pagePath",
   "assert.elementText",
   "assert.elementVisible",
+  "assert.networkRequest",
+  "assert.networkResponse",
   "gesture.touchStart",
   "gesture.touchMove",
   "gesture.touchTap",
   "gesture.touchEnd",
+  "network.intercept.add",
+  "network.intercept.remove",
+  "network.intercept.clear",
   "storage.set",
   "storage.get",
   "storage.info",
@@ -147,6 +156,8 @@ const NO_INPUT_REQUIRED_STEP_TYPES = new Set<SupportedStepType>([
   "device.scanCode",
   "auth.login",
   "auth.checkSession",
+  "network.listen.clear",
+  "network.intercept.clear",
 ]);
 
 const BRIDGE_STEP_TYPES = new Set<SupportedStepType>([
@@ -190,6 +201,22 @@ const BRIDGE_STEP_TYPES = new Set<SupportedStepType>([
   "auth.checkSession",
   "subscription.requestMessage",
 ]);
+
+const NETWORK_MATCHER_RESOURCE_TYPES = new Set(["request", "upload", "download"]);
+const NETWORK_WAIT_EVENTS = new Set(["request", "response"]);
+const NETWORK_INTERCEPT_ACTIONS = new Set(["continue", "fail", "delay", "mock"]);
+const NETWORK_MATCHER_KEYS = new Set([
+  "url",
+  "urlPattern",
+  "method",
+  "resourceType",
+  "query",
+  "headers",
+  "body",
+  "statusCode",
+  "responseHeaders",
+  "responseBody",
+] as const);
 
 export class PlanValidationError extends Error {
   readonly details: string[];
@@ -389,6 +416,31 @@ function validateStepShape(step: PlanStep, index: number, plan: Partial<Plan>, e
       }
       break;
     }
+    case "network.listen.start": {
+      requireOptionalStringField(step, index, "listenerId", errors);
+      requireOptionalBooleanField(step, index, "captureResponses", errors);
+      requireOptionalNumberField(step, index, "maxEvents", errors);
+      validateNetworkMatcher(step.input.matcher, `steps[${index}] network.listen.start matcher`, errors);
+      break;
+    }
+    case "network.listen.stop": {
+      requireStringField(step, index, "listenerId", errors);
+      break;
+    }
+    case "network.listen.clear": {
+      requireOptionalStringField(step, index, "listenerId", errors);
+      break;
+    }
+    case "network.wait": {
+      requireOptionalStringField(step, index, "listenerId", errors);
+      requireOptionalEnumField(step, index, "event", NETWORK_WAIT_EVENTS, errors);
+      requireOptionalNumberField(step, index, "timeoutMs", errors);
+      validateNetworkMatcher(step.input.matcher, `steps[${index}] network.wait matcher`, errors);
+      if (step.input.listenerId === undefined && step.input.matcher === undefined) {
+        errors.push(`steps[${index}] network.wait requires listenerId or matcher.`);
+      }
+      break;
+    }
     case "assert.pagePath": {
       if (typeof step.input.expectedPath !== "string") {
         errors.push(`steps[${index}] assert.pagePath requires expectedPath.`);
@@ -493,6 +545,36 @@ function validateStepShape(step: PlanStep, index: number, plan: Partial<Plan>, e
       requireStringField(step, index, "phoneNumber", errors);
       break;
     }
+    case "assert.networkRequest":
+    case "assert.networkResponse": {
+      requireOptionalStringField(step, index, "listenerId", errors);
+      requireOptionalNumberField(step, index, "count", errors);
+      requireOptionalNumberField(step, index, "minCount", errors);
+      requireOptionalNumberField(step, index, "maxCount", errors);
+      requireOptionalNumberField(step, index, "withinMs", errors);
+      requireOptionalStringField(step, index, "orderedAfter", errors);
+      requireOptionalStringField(step, index, "orderedBefore", errors);
+      validateNetworkMatcher(step.input.matcher, `steps[${index}] ${step.type} matcher`, errors);
+      if (step.input.count !== undefined && (step.input.minCount !== undefined || step.input.maxCount !== undefined)) {
+        errors.push(`steps[${index}] ${step.type} cannot combine count with minCount or maxCount.`);
+      }
+      break;
+    }
+    case "network.intercept.add": {
+      requireOptionalStringField(step, index, "ruleId", errors);
+      validateNetworkMatcher(step.input.matcher, `steps[${index}] network.intercept.add matcher`, errors, {
+        required: true,
+      });
+      validateInterceptBehavior(step, index, errors);
+      break;
+    }
+    case "network.intercept.remove": {
+      requireStringField(step, index, "ruleId", errors);
+      break;
+    }
+    case "network.intercept.clear": {
+      break;
+    }
     case "subscription.requestMessage": {
       if (!Array.isArray(step.input.tmplIds) || step.input.tmplIds.length === 0) {
         errors.push(`steps[${index}] subscription.requestMessage requires a non-empty tmplIds array.`);
@@ -540,4 +622,139 @@ function requireOptionalNumberField(step: PlanStep, index: number, fieldName: st
   if (step.input[fieldName] !== undefined) {
     requireNumberField(step, index, fieldName, errors);
   }
+}
+
+function requireOptionalStringField(step: PlanStep, index: number, fieldName: string, errors: string[]): void {
+  if (
+    step.input[fieldName] !== undefined &&
+    (typeof step.input[fieldName] !== "string" || !String(step.input[fieldName]).trim())
+  ) {
+    errors.push(`steps[${index}] ${step.type} ${fieldName} must be a non-empty string when provided.`);
+  }
+}
+
+function requireOptionalBooleanField(step: PlanStep, index: number, fieldName: string, errors: string[]): void {
+  if (step.input[fieldName] !== undefined && typeof step.input[fieldName] !== "boolean") {
+    errors.push(`steps[${index}] ${step.type} ${fieldName} must be a boolean when provided.`);
+  }
+}
+
+function requireOptionalEnumField(
+  step: PlanStep,
+  index: number,
+  fieldName: string,
+  allowedValues: Set<string>,
+  errors: string[],
+): void {
+  if (step.input[fieldName] === undefined) {
+    return;
+  }
+  if (typeof step.input[fieldName] !== "string" || !allowedValues.has(step.input[fieldName] as string)) {
+    errors.push(
+      `steps[${index}] ${step.type} ${fieldName} must be one of ${Array.from(allowedValues)
+        .map((value) => `\`${value}\``)
+        .join(", ")} when provided.`,
+    );
+  }
+}
+
+function validateNetworkMatcher(
+  matcher: unknown,
+  pathPrefix: string,
+  errors: string[],
+  options: { required?: boolean } = {},
+): void {
+  if (matcher === undefined) {
+    if (options.required) {
+      errors.push(`${pathPrefix} is required.`);
+    }
+    return;
+  }
+  if (!isRecord(matcher)) {
+    errors.push(`${pathPrefix} must be an object.`);
+    return;
+  }
+  for (const key of Object.keys(matcher)) {
+    if (!NETWORK_MATCHER_KEYS.has(key as (typeof NETWORK_MATCHER_KEYS extends Set<infer T> ? T : never))) {
+      errors.push(`${pathPrefix} has an unsupported field: ${JSON.stringify(key)}.`);
+    }
+  }
+  validateOptionalStringValue(matcher.url, `${pathPrefix}.url`, errors);
+  validateOptionalStringValue(matcher.urlPattern, `${pathPrefix}.urlPattern`, errors);
+  validateOptionalStringValue(matcher.method, `${pathPrefix}.method`, errors);
+  if (matcher.resourceType !== undefined) {
+    if (typeof matcher.resourceType !== "string" || !NETWORK_MATCHER_RESOURCE_TYPES.has(matcher.resourceType)) {
+      errors.push(
+        `${pathPrefix}.resourceType must be one of ${Array.from(NETWORK_MATCHER_RESOURCE_TYPES)
+          .map((value) => `\`${value}\``)
+          .join(", ")} when provided.`,
+      );
+    }
+  }
+  validateOptionalRecordValue(matcher.query, `${pathPrefix}.query`, errors);
+  validateOptionalRecordValue(matcher.headers, `${pathPrefix}.headers`, errors);
+  validateOptionalRecordValue(matcher.responseHeaders, `${pathPrefix}.responseHeaders`, errors);
+  if (matcher.statusCode !== undefined && (typeof matcher.statusCode !== "number" || !Number.isFinite(matcher.statusCode))) {
+    errors.push(`${pathPrefix}.statusCode must be numeric when provided.`);
+  }
+}
+
+function validateInterceptBehavior(step: PlanStep, index: number, errors: string[]): void {
+  if (!isRecord(step.input.behavior)) {
+    errors.push(`steps[${index}] network.intercept.add requires a behavior object.`);
+    return;
+  }
+  const behavior = step.input.behavior;
+  if (typeof behavior.action !== "string" || !NETWORK_INTERCEPT_ACTIONS.has(behavior.action)) {
+    errors.push(
+      `steps[${index}] network.intercept.add behavior.action must be one of ${Array.from(NETWORK_INTERCEPT_ACTIONS)
+        .map((value) => `\`${value}\``)
+        .join(", ")}.`,
+    );
+    return;
+  }
+  if (behavior.action === "delay") {
+    if (typeof behavior.delayMs !== "number" || !Number.isFinite(behavior.delayMs)) {
+      errors.push(`steps[${index}] network.intercept.add behavior.delayMs must be numeric for delay actions.`);
+    }
+  }
+  if (behavior.action === "fail") {
+    validateOptionalStringValue(
+      behavior.errorMessage,
+      `steps[${index}] network.intercept.add behavior.errorMessage`,
+      errors,
+    );
+    validateOptionalStringValue(behavior.errorCode, `steps[${index}] network.intercept.add behavior.errorCode`, errors);
+  }
+  if (behavior.action === "mock") {
+    if (!isRecord(behavior.response)) {
+      errors.push(`steps[${index}] network.intercept.add behavior.response must be an object for mock actions.`);
+      return;
+    }
+    const response = behavior.response;
+    if (response.statusCode !== undefined && (typeof response.statusCode !== "number" || !Number.isFinite(response.statusCode))) {
+      errors.push(`steps[${index}] network.intercept.add behavior.response.statusCode must be numeric when provided.`);
+    }
+    validateOptionalRecordValue(
+      response.headers,
+      `steps[${index}] network.intercept.add behavior.response.headers`,
+      errors,
+    );
+  }
+}
+
+function validateOptionalStringValue(value: unknown, fieldName: string, errors: string[]): void {
+  if (value !== undefined && (typeof value !== "string" || value.trim() === "")) {
+    errors.push(`${fieldName} must be a non-empty string when provided.`);
+  }
+}
+
+function validateOptionalRecordValue(value: unknown, fieldName: string, errors: string[]): void {
+  if (value !== undefined && !isRecord(value)) {
+    errors.push(`${fieldName} must be an object when provided.`);
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

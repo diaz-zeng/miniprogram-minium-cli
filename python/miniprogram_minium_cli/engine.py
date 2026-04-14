@@ -14,6 +14,13 @@ from .domain.action_models import GestureTarget, Locator, WaitCondition
 from .domain.action_service import ActionService
 from .domain.errors import CliExecutionError, ErrorCode
 from .domain.gesture_service import GestureService
+from .domain.network_models import (
+    NetworkAssertConfig,
+    NetworkInterceptConfig,
+    NetworkListenConfig,
+    NetworkWaitConfig,
+)
+from .domain.network_service import NetworkService
 from .domain.session_repository import SessionRepository
 from .domain.session_service import SessionService
 from .support.artifacts import ArtifactManager
@@ -148,11 +155,16 @@ def _execute_plan(plan: dict[str, Any]) -> dict[str, Any]:
         runtime_adapter=runtime_adapter,
         artifact_manager=run_artifact_manager,
     )
+    network_service = NetworkService(
+        repository=repository,
+        runtime_adapter=runtime_adapter,
+    )
 
     executor = _ExecutionEngine(
         session_service=session_service,
         action_service=action_service,
         gesture_service=gesture_service,
+        network_service=network_service,
         logger=logger,
         auto_screenshot_mode=config.auto_screenshot,
     )
@@ -181,6 +193,9 @@ def _execute_plan(plan: dict[str, Any]) -> dict[str, Any]:
         summary["skipped"] = execution_result["skipped_steps"]
     if execution_result.get("latest_page_path"):
         summary["latestPagePath"] = execution_result["latest_page_path"]
+    if execution_result["network_activity"]["eventCount"] > 0:
+        summary["networkEventCount"] = execution_result["network_activity"]["eventCount"]
+        summary["networkSessionCount"] = execution_result["network_activity"]["sessionCount"]
     if execution_result.get("failure_error"):
         summary["failure"] = execution_result["failure_error"]
 
@@ -192,6 +207,11 @@ def _execute_plan(plan: dict[str, Any]) -> dict[str, Any]:
 
     result_path = run_dir / "result.json"
     comparison_path = run_dir / "comparison.json"
+    network_path = run_dir / "network.json"
+    network_path.write_text(
+        json.dumps(execution_result["network_activity"], ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
     result_payload = {
         "summary": summary,
         "stepResults": execution_result["step_results"],
@@ -201,8 +221,10 @@ def _execute_plan(plan: dict[str, Any]) -> dict[str, Any]:
             "planPath": str(run_dir / "plan.json"),
             "resultPath": str(result_path),
             "comparisonPath": str(comparison_path),
+            "networkPath": str(network_path),
             "screenshotPaths": execution_result["screenshot_paths"],
         },
+        "network": execution_result["network_activity"],
         "runtime": {
             "language": config.language,
             "pythonExecutable": sys.executable,
@@ -309,17 +331,20 @@ class _ExecutionEngine:
         session_service: SessionService,
         action_service: ActionService,
         gesture_service: GestureService,
+        network_service: NetworkService,
         logger,
         auto_screenshot_mode: str,
     ) -> None:
         self._session_service = session_service
         self._action_service = action_service
         self._gesture_service = gesture_service
+        self._network_service = network_service
         self._logger = logger
         self._auto_screenshot_mode = auto_screenshot_mode
         self._current_session_id: str | None = None
         self._latest_page_path: str | None = None
         self._screenshot_paths: list[str] = []
+        self._closed_network_sessions: list[dict[str, Any]] = []
 
     def execute(self, plan: dict[str, Any]) -> dict[str, Any]:
         step_results: list[dict[str, Any]] = []
@@ -350,6 +375,7 @@ class _ExecutionEngine:
                             )
                         break
         finally:
+            network_activity = self._network_service.export_state(self._closed_network_sessions)
             auto_closed_session_ids = self._session_service.cleanup_all()
 
         success_count = sum(1 for item in step_results if item.get("status") == "passed")
@@ -380,6 +406,7 @@ class _ExecutionEngine:
             "duration_ms": int((time.perf_counter() - started_at) * 1000),
             "failure_error": failure_error,
             "screenshot_paths": list(dict.fromkeys(self._screenshot_paths)),
+            "network_activity": network_activity,
         }
 
     def _execute_step(self, step: dict[str, Any]) -> dict[str, Any]:
@@ -447,6 +474,50 @@ class _ExecutionEngine:
                     self._require_session_id(input_data),
                     locator,
                 )
+            elif step_type == "network.listen.start":
+                output = self._network_service.start_listener(
+                    self._require_session_id(input_data),
+                    NetworkListenConfig.from_input(input_data),
+                )
+            elif step_type == "network.listen.stop":
+                output = self._network_service.stop_listener(
+                    self._require_session_id(input_data),
+                    str(input_data["listenerId"]),
+                )
+            elif step_type == "network.listen.clear":
+                output = self._network_service.clear_listener_events(
+                    self._require_session_id(input_data),
+                    input_data.get("listenerId"),
+                )
+            elif step_type == "network.wait":
+                output = self._network_service.wait_for_event(
+                    self._require_session_id(input_data),
+                    NetworkWaitConfig.from_input(input_data),
+                )
+            elif step_type == "assert.networkRequest":
+                output = self._network_service.assert_request(
+                    self._require_session_id(input_data),
+                    NetworkAssertConfig.from_input(input_data),
+                )
+            elif step_type == "assert.networkResponse":
+                output = self._network_service.assert_response(
+                    self._require_session_id(input_data),
+                    NetworkAssertConfig.from_input(input_data),
+                )
+            elif step_type == "network.intercept.add":
+                output = self._network_service.add_intercept_rule(
+                    self._require_session_id(input_data),
+                    NetworkInterceptConfig.from_input(input_data),
+                )
+            elif step_type == "network.intercept.remove":
+                output = self._network_service.remove_intercept_rule(
+                    self._require_session_id(input_data),
+                    str(input_data["ruleId"]),
+                )
+            elif step_type == "network.intercept.clear":
+                output = self._network_service.clear_intercept_rules(
+                    self._require_session_id(input_data),
+                )
             elif step_type in _BRIDGE_STEP_TYPES:
                 output = self._action_service.execute_bridge_action(
                     self._require_session_id(input_data),
@@ -495,7 +566,9 @@ class _ExecutionEngine:
                     auto_capture = self._capture_auto_screenshot(step, prefix="before-close")
                     if auto_capture is not None:
                         output = auto_capture
-                output = self._session_service.close_session(self._require_session_id(input_data))
+                closing_session_id = self._require_session_id(input_data)
+                self._closed_network_sessions.append(self._network_service.snapshot_session(closing_session_id))
+                output = self._session_service.close_session(closing_session_id)
                 self._current_session_id = None
             else:
                 raise CliExecutionError(
