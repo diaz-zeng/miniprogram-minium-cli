@@ -4,11 +4,12 @@ Use this reference when the task is to understand the outcome of a `miniprogram-
 
 ## Primary artifacts
 
-Prefer these files over raw terminal output:
+When deeper analysis is needed, prefer these files over raw terminal output:
 
 - `summary.json`
 - `result.json`
 - `comparison.json`
+- `network.json`
 - screenshots
 
 ## What to inspect
@@ -22,7 +23,10 @@ Prefer these files over raw terminal output:
 
 ## Guidance
 
-- Start from the structured files in the run directory.
+- Start from the CLI conclusion first.
+- If the result already matches the expectation, do not read run artifacts by default.
+- When you need to investigate an unexpected result, start from the smallest useful structured file in the run directory.
+- Prefer reading these artifacts after a plain `exec` run instead of defaulting to `exec ... --json`.
 - Use screenshots for visual confirmation or failure forensics.
 - Do not infer unsupported runtime behavior from logs when the structured result already answers the question.
 - For bridge-backed steps, prefer `bridge_method`, `result`, and `current_page_path` from the structured output over terminal text.

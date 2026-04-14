@@ -31,3 +31,4 @@
 - [x] 5.2 新增或更新回归计划，覆盖“动作后是否发请求”“特定请求过滤”“失败注入”“mock 返回”“请求顺序/次数断言”等场景
 - [x] 5.3 为 Node 侧计划校验与 Python 侧执行逻辑补充测试，至少覆盖非法 matcher、等待超时、mock 响应和自动清理规则
 - [x] 5.4 更新 `README.md`、`docs/README.zh-CN.md` 与仓库内 skill 指南，说明网络能力的使用方式、限制和典型示例
+- [x] 5.5 更新 `skills/miniprogram-minium-cli` 的执行指导，明确 run 结果已落盘时默认不附带 `--json`，仅在必须直接消费 stdout 结构化结果时按需启用该参数
