@@ -130,14 +130,16 @@ npx skills add diaz-zeng/miniprogram-minium-cli --skill interactive-classname-ta
 
 ## 发布通道
 
-这个仓库会维护两个 npm 通道：
+这个仓库会维护三个 npm 通道：
 
+- `canary`：同仓库 PR 源分支更新时发布的 canary 验证版
+- `next`：`main` 分支在 PR 合入后自动发布的集成预发布版
 - `latest`：由匹配的 `v*` git tag 触发的正式版
-- `next`：`main` 分支在 PR 合入后自动发布的预发布版
 
 如果要显式安装预发布通道，请执行：
 
 ```bash
+pnpm add -g miniprogram-minium-cli@canary
 pnpm add -g miniprogram-minium-cli@next
 ```
 
@@ -146,13 +148,21 @@ pnpm add -g miniprogram-minium-cli@next
 这个仓库把 `package.json.version` 作为“下一个正式版”的唯一事实源。
 
 1. 先通过一个 PR 把 `package.json.version` 更新到下一个目标正式版本，例如 `1.3.0`。
-2. 按正常流程继续把功能和修复 PR 合入 `main`。每次合入后，GitHub Actions 都会发布一个唯一的预发布版本，例如 `1.3.0-beta.<run-id>.<attempt>.<sha>`，并打到 npm `next`。
-3. 当准备正式发版时，创建并推送匹配的 git tag，例如 `v1.3.0`。正式发布 workflow 会先校验该 tag 与 `package.json.version` 完全一致，再发布到 npm `latest`。
-4. 正式版发布完成后，再通过一个新的 PR 把 `package.json.version` 推进到下一个目标版本，例如 `1.3.1` 或 `1.4.0`。
+2. 在这个 PR 打开期间，如果继续向同仓库的 PR 源分支 push，GitHub Actions 会发布一个唯一的 canary 版本，例如 `1.3.0-canary-pr-42.<run-id>.<attempt>.<sha>`，并打到 npm `canary`。
+3. 按正常流程继续把功能和修复 PR 合入 `main`。每次合入后，GitHub Actions 都会发布一个唯一的预发布版本，例如 `1.3.0-beta.<run-id>.<attempt>.<sha>`，并打到 npm `next`。
+4. 当准备正式发版时，创建并推送匹配的 git tag，例如 `v1.3.0`。正式发布 workflow 会先校验该 tag 与 `package.json.version` 完全一致，再发布到 npm `latest`。
+5. 正式版发布完成后，再通过一个新的 PR 把 `package.json.version` 推进到下一个目标版本，例如 `1.3.1` 或 `1.4.0`。
+
+重要发布守卫：
+
+- 如果 `package.json.version` 对应的稳定版已经正式存在于 npm，`canary` 和 `next` 流水线都会在执行 `npm publish` 之前直接失败。
+- 遇到这种情况时，应该先通过 PR 把 `package.json.version` bump 到下一个目标正式版本，再继续 push PR 或 `main` 上的变更。
+- 浮动的 `@canary` tag 永远指向当前最新一次 canary 发布；如果你要安装某个 PR 的精确构建，请直接安装完整版本号，而不是依赖 `@canary`。
 
 如果需要在本地调试发布辅助脚本，可以执行：
 
 ```bash
+pnpm run release:assert-unpublished-base
 pnpm run release:compute-prerelease -- --run-id 123 --run-attempt 1 --sha abcdef1
 pnpm run release:validate-tag -- --tag v1.2.0
 ```

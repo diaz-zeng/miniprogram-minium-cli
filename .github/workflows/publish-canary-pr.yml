@@ -1,26 +1,31 @@
-name: Publish npm prerelease
+name: Publish npm canary for PR branches
 
 on:
-  push:
-    branches:
-      - main
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
 
 permissions:
   contents: read
   id-token: write
 
 concurrency:
-  group: npm-prerelease-main
+  group: npm-canary-pr-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  publish-prerelease:
+  publish-canary:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
     steps:
-      - name: Checkout repository
+      - name: Checkout PR head commit
         uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -43,21 +48,23 @@ jobs:
       - name: Run tests
         run: pnpm test
 
-      - name: Compute prerelease version
+      - name: Compute canary version
         id: version
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          VERSION="$(pnpm --silent run release:compute-prerelease -- --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" --sha "$GITHUB_SHA")"
+          VERSION="$(pnpm --silent run release:compute-prerelease -- --preid "canary-pr-$PR_NUMBER" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" --sha "${{ github.event.pull_request.head.sha }}")"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Computed prerelease version: $VERSION"
+          echo "Computed canary version: $VERSION"
 
       - name: Stage publishable package
         id: stage
         run: |
-          PACKAGE_DIR="$RUNNER_TEMP/miniprogram-minium-cli-prerelease"
+          PACKAGE_DIR="$RUNNER_TEMP/miniprogram-minium-cli-canary"
           pnpm --silent run release:stage-package -- --version "${{ steps.version.outputs.version }}" --output-dir "$PACKAGE_DIR"
           echo "package_dir=$PACKAGE_DIR" >> "$GITHUB_OUTPUT"
 
-      - name: Publish prerelease to npm
+      - name: Publish canary release to npm
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
@@ -65,17 +72,18 @@ jobs:
           if [ -n "${NPM_TOKEN:-}" ]; then
             export NODE_AUTH_TOKEN="$NPM_TOKEN"
           fi
-          if ! npm publish "${{ steps.stage.outputs.package_dir }}" --tag next --provenance --access public; then
-            echo "::error::npm prerelease publish failed. Configure npm trusted publishing for this repository or provide NPM_TOKEN as a temporary fallback."
+          if ! npm publish "${{ steps.stage.outputs.package_dir }}" --tag canary --provenance --access public; then
+            echo "::error::npm canary publish failed. Configure npm trusted publishing for pull_request workflows or provide NPM_TOKEN as a temporary fallback."
             exit 1
           fi
 
       - name: Write workflow summary
         run: |
           {
-            echo "## npm prerelease published"
+            echo "## npm canary published"
             echo
+            echo "- PR: \`#${{ github.event.pull_request.number }}\`"
             echo "- Version: \`${{ steps.version.outputs.version }}\`"
-            echo "- Dist-tag: \`next\`"
-            echo "- Install: \`pnpm add -g miniprogram-minium-cli@next\`"
+            echo "- Dist-tag: \`canary\`"
+            echo "- Install: \`pnpm add -g miniprogram-minium-cli@${{ steps.version.outputs.version }}\`"
           } >> "$GITHUB_STEP_SUMMARY"

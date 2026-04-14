@@ -9,6 +9,12 @@ import { test } from "node:test";
 const execFile = promisify(execFileCallback);
 const repoRoot = path.resolve(__dirname, "..", "..");
 const computeScript = path.join(repoRoot, "scripts", "release", "compute-prerelease-version.mjs");
+const assertUnpublishedBaseScript = path.join(
+  repoRoot,
+  "scripts",
+  "release",
+  "assert-unpublished-base-version.mjs",
+);
 const validateScript = path.join(repoRoot, "scripts", "release", "validate-tag-version.mjs");
 const stageScript = path.join(repoRoot, "scripts", "release", "stage-package.mjs");
 
@@ -54,6 +60,32 @@ test("compute-prerelease-version derives a unique beta version from a stable bas
   }
 });
 
+test("compute-prerelease-version accepts a custom preid for canary publishing", async () => {
+  const fixtureDir = await fs.mkdtemp(path.join(os.tmpdir(), "minium-release-compute-canary-"));
+
+  try {
+    await writePackageJson(fixtureDir, "1.3.0");
+
+    const { stdout } = await execFile(process.execPath, [
+      computeScript,
+      "--package",
+      path.join(fixtureDir, "package.json"),
+      "--preid",
+      "canary-pr-42",
+      "--run-id",
+      "789",
+      "--run-attempt",
+      "3",
+      "--sha",
+      "1234567890ab",
+    ]);
+
+    assert.equal(stdout.trim(), "1.3.0-canary-pr-42.789.3.1234567");
+  } finally {
+    await fs.rm(fixtureDir, { recursive: true, force: true });
+  }
+});
+
 test("compute-prerelease-version rejects a prerelease base version", async () => {
   const fixtureDir = await fs.mkdtemp(path.join(os.tmpdir(), "minium-release-compute-invalid-"));
 
@@ -67,6 +99,53 @@ test("compute-prerelease-version rejects a prerelease base version", async () =>
         path.join(fixtureDir, "package.json"),
       ]),
       /stable semver version/,
+    );
+  } finally {
+    await fs.rm(fixtureDir, { recursive: true, force: true });
+  }
+});
+
+test("assert-unpublished-base-version succeeds when the stable version is not yet published", async () => {
+  const fixtureDir = await fs.mkdtemp(path.join(os.tmpdir(), "minium-release-assert-base-missing-"));
+
+  try {
+    await writePackageJson(fixtureDir, "2.1.0");
+
+    const { stdout } = await execFile(
+      process.execPath,
+      [assertUnpublishedBaseScript, "--package", path.join(fixtureDir, "package.json")],
+      {
+        env: {
+          ...process.env,
+          MINIUM_RELEASE_MOCK_NPM_VIEW_RESULT: "missing",
+        },
+      },
+    );
+
+    assert.equal(stdout.trim(), "2.1.0");
+  } finally {
+    await fs.rm(fixtureDir, { recursive: true, force: true });
+  }
+});
+
+test("assert-unpublished-base-version rejects a stable version that is already published", async () => {
+  const fixtureDir = await fs.mkdtemp(path.join(os.tmpdir(), "minium-release-assert-base-exists-"));
+
+  try {
+    await writePackageJson(fixtureDir, "2.1.0");
+
+    await assert.rejects(
+      execFile(
+        process.execPath,
+        [assertUnpublishedBaseScript, "--package", path.join(fixtureDir, "package.json")],
+        {
+          env: {
+            ...process.env,
+            MINIUM_RELEASE_MOCK_NPM_VIEW_RESULT: "exists",
+          },
+        },
+      ),
+      /already published to npm/,
     );
   } finally {
     await fs.rm(fixtureDir, { recursive: true, force: true });
