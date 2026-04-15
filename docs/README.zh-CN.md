@@ -130,41 +130,49 @@ npx skills add diaz-zeng/miniprogram-minium-cli --skill interactive-classname-ta
 
 ## 发布通道
 
-这个仓库会维护三个 npm 通道：
+这个仓库会维护四个 npm 通道：
 
 - `canary`：同仓库 PR 源分支更新时发布的 canary 验证版
-- `next`：`main` 分支在 PR 合入后自动发布的集成预发布版
-- `latest`：由匹配的 `v*` git tag 触发的正式版
-
+- `alpha`：活跃 `next/x.y.z` 分支发布的 MAJOR 预发布版
+- `next`：活跃 `release/x.y.z` 分支发布的 MINOR beta 版
+- `latest`：正式发布 PR 合入 `main` 后发布的稳定版
 如果要显式安装预发布通道，请执行：
 
 ```bash
 pnpm add -g miniprogram-minium-cli@canary
+pnpm add -g miniprogram-minium-cli@alpha
 pnpm add -g miniprogram-minium-cli@next
 ```
 
 ## 维护者发布流程
 
-这个仓库把 `package.json.version` 作为“下一个正式版”的唯一事实源。
+这个仓库把每条活跃版本线中的 `package.json.version` 作为该版本线目标正式版的唯一事实源。
 
-1. 先通过一个 PR 把 `package.json.version` 更新到下一个目标正式版本，例如 `1.3.0`。
-2. 在这个 PR 打开期间，如果继续向同仓库的 PR 源分支 push，GitHub Actions 会发布一个唯一的 canary 版本，例如 `1.3.0-canary-pr-42.<run-id>.<attempt>.<sha>`，并打到 npm `canary`。
-3. 按正常流程继续把功能和修复 PR 合入 `main`。每次合入后，GitHub Actions 都会发布一个唯一的预发布版本，例如 `1.3.0-beta.<run-id>.<attempt>.<sha>`，并打到 npm `next`。
-4. 当准备正式发版时，创建并推送匹配的 git tag，例如 `v1.3.0`。正式发布 workflow 会先校验该 tag 与 `package.json.version` 完全一致，再发布到 npm `latest`。
-5. 正式版发布完成后，再通过一个新的 PR 把 `package.json.version` 推进到下一个目标版本，例如 `1.3.1` 或 `1.4.0`。
+1. `main` 永远代表当前稳定版本，只接收正式发布 PR。
+2. 使用 `release/x.y.z` 管理下一个 MINOR 版本，使用 `next/x.y.z` 管理下一个 MAJOR 版本，使用 `hotfix/x.y.z` 管理当前稳定版的 PATCH 修复。
+3. 确保分支名和 `package.json.version` 完全一致，例如 `release/1.5.0` 对应 `package.json.version = 1.5.0`。
+4. 同仓库 PR 源分支继续发布唯一的 canary 版本，例如 `1.5.0-canary-pr-42.<run-id>.<attempt>.<sha>`，并打到 npm `canary`。
+5. `release/x.y.z` 分支上的 push 会发布 MINOR beta 版本，例如 `1.5.0-beta.<run-id>.<attempt>.<sha>`，并打到 npm `next`。
+6. `next/x.y.z` 分支上的 push 会发布 MAJOR alpha 版本，例如 `2.0.0-alpha.<run-id>.<attempt>.<sha>`，并打到 npm `alpha`。
+7. 当某条版本线准备正式发版时，把对应的正式发布 PR 合入 `main`。stable workflow 会校验合入来源、发布 npm `latest`、自动创建 `vX.Y.Z` tag，并自动创建 GitHub Release。
+8. 正式版 GitHub Release 会把 `CHANGELOG.md` 中对应版本的章节作为主体内容，并附加自动生成的 release notes；如果 changelog 缺失，该次正式发布会直接失败。
+9. 每次 PATCH 或 MINOR 正式发布完成后，都要把适用修复继续前向同步到当前活跃的 `release/*` 和 `next/*` 版本线。
 
 重要发布守卫：
 
-- 如果 `package.json.version` 对应的稳定版已经正式存在于 npm，`canary` 和 `next` 流水线都会在执行 `npm publish` 之前直接失败。
-- 遇到这种情况时，应该先通过 PR 把 `package.json.version` bump 到下一个目标正式版本，再继续 push PR 或 `main` 上的变更。
-- 浮动的 `@canary` tag 永远指向当前最新一次 canary 发布；如果你要安装某个 PR 的精确构建，请直接安装完整版本号，而不是依赖 `@canary`。
+- 如果活跃版本线中的稳定版本已经正式存在于 npm，`canary`、`alpha` 和 `next` 预发布流水线都会在执行 `npm publish` 前直接失败。
+- 如果 `main` 上的 stable workflow 无法解析出一个已经合入的正式发布 PR，workflow 会 fail closed，而不是继续发版。
+- 如果 stable workflow 找不到当前版本在 `CHANGELOG.md` 中对应的章节，workflow 会 fail closed，而不是创建空的 GitHub Release。
+- 浮动的 `@canary`、`@alpha`、`@next` dist-tag 永远指向当前该通道最新一次成功发布；如果你要安装精确构建，请直接使用完整版本号。
 
 如果需要在本地调试发布辅助脚本，可以执行：
 
 ```bash
+pnpm run release:assert-release-branch -- --branch release/1.5.0
 pnpm run release:assert-unpublished-base
-pnpm run release:compute-prerelease -- --run-id 123 --run-attempt 1 --sha abcdef1
-pnpm run release:validate-tag -- --tag v1.2.0
+pnpm run release:assert-stable-unpublished
+pnpm run release:compute-prerelease -- --preid beta --run-id 123 --run-attempt 1 --sha abcdef1
+pnpm run release:extract-changelog -- --version 1.5.0
 ```
 
 GitHub Actions 发布流程优先使用 npm trusted publishing。如果仓库暂时还没有配置 trusted publishing，也可以通过仓库 secrets 提供 `NPM_TOKEN` 作为过渡方案。

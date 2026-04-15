@@ -1,26 +1,30 @@
-name: Publish npm release
+name: Publish npm stable release from main
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
+  pull-requests: read
 
 concurrency:
-  group: npm-release-${{ github.ref }}
+  group: npm-stable-main
   cancel-in-progress: false
 
 jobs:
   publish-release:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
+    environment: npm-release
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -34,18 +38,76 @@ jobs:
           cache: pnpm
           registry-url: https://registry.npmjs.org
 
+      - name: Resolve merged release pull request
+        id: release_pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const response = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+              owner,
+              repo,
+              commit_sha: context.sha,
+            });
+            const pullRequest = response.data.find((pr) => pr.base.ref === "main" && pr.merged_at);
+            if (!pullRequest) {
+              core.setFailed(`Commit ${context.sha} is not associated with a merged release PR into main.`);
+              return;
+            }
+            core.setOutput("number", String(pullRequest.number));
+            core.setOutput("head_ref", pullRequest.head.ref);
+
+      - name: Validate merged release branch and version
+        id: release_line
+        run: pnpm --silent run release:assert-release-branch -- --branch "${{ steps.release_pr.outputs.head_ref }}" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure stable release version is unpublished
+        run: pnpm --silent run release:assert-stable-unpublished
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Run tests
         run: pnpm test
 
-      - name: Validate tag and package version
-        id: version
+      - name: Ensure tag and release do not already exist
+        uses: actions/github-script@v7
+        env:
+          RELEASE_VERSION: ${{ steps.release_line.outputs.version }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const tag = `v${process.env.RELEASE_VERSION}`;
+            try {
+              await github.rest.git.getRef({ owner, repo, ref: `tags/${tag}` });
+              core.setFailed(`Tag ${tag} already exists.`);
+              return;
+            } catch (error) {
+              if (error.status !== 404) {
+                throw error;
+              }
+            }
+            try {
+              await github.rest.repos.getReleaseByTag({ owner, repo, tag });
+              core.setFailed(`GitHub Release for ${tag} already exists.`);
+            } catch (error) {
+              if (error.status !== 404) {
+                throw error;
+              }
+            }
+
+      - name: Extract changelog section
+        id: changelog
+        env:
+          RELEASE_VERSION: ${{ steps.release_line.outputs.version }}
         run: |
-          VERSION="$(pnpm --silent run release:validate-tag -- --tag "$GITHUB_REF_NAME")"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Validated release version: $VERSION"
+          CHANGELOG_BODY="$RUNNER_TEMP/release-changelog.md"
+          pnpm --silent run release:extract-changelog -- --version "$RELEASE_VERSION" > "$CHANGELOG_BODY"
+          echo "path=$CHANGELOG_BODY" >> "$GITHUB_OUTPUT"
+
+      - name: Compute stable version
+        id: version
+        run: echo "version=${{ steps.release_line.outputs.version }}" >> "$GITHUB_OUTPUT"
 
       - name: Stage publishable package
         id: stage
@@ -63,15 +125,75 @@ jobs:
             export NODE_AUTH_TOKEN="$NPM_TOKEN"
           fi
           if ! npm publish "${{ steps.stage.outputs.package_dir }}" --provenance --access public; then
-            echo "::error::npm release publish failed. Check tag/package version consistency and configure npm trusted publishing or NPM_TOKEN."
+            echo "::error::npm release publish failed. Check release branch validation and configure npm trusted publishing or NPM_TOKEN."
             exit 1
           fi
+
+      - name: Generate GitHub release notes
+        id: generated_notes
+        uses: actions/github-script@v7
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const response = await github.rest.repos.generateReleaseNotes({
+              owner,
+              repo,
+              tag_name: `v${process.env.RELEASE_VERSION}`,
+              target_commitish: context.sha,
+            });
+            const fs = require("node:fs");
+            const path = `${process.env.RUNNER_TEMP}/generated-release-notes.md`;
+            fs.writeFileSync(path, response.data.body ?? "", "utf8");
+            core.setOutput("path", path);
+
+      - name: Compose release body
+        id: release_body
+        run: |
+          BODY_PATH="$RUNNER_TEMP/release-body.md"
+          {
+            echo "## Changelog"
+            echo
+            cat "${{ steps.changelog.outputs.path }}"
+            echo
+            echo "---"
+            echo
+            echo "## Auto-generated Notes"
+            echo
+            cat "${{ steps.generated_notes.outputs.path }}"
+          } > "$BODY_PATH"
+          echo "path=$BODY_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Create tag and GitHub Release
+        uses: actions/github-script@v7
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          RELEASE_KIND: ${{ steps.release_line.outputs.kind }}
+          RELEASE_BODY_PATH: ${{ steps.release_body.outputs.path }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const fs = require("node:fs");
+            const body = fs.readFileSync(process.env.RELEASE_BODY_PATH, "utf8");
+            await github.rest.repos.createRelease({
+              owner,
+              repo,
+              tag_name: `v${process.env.RELEASE_VERSION}`,
+              target_commitish: context.sha,
+              name: `v${process.env.RELEASE_VERSION}`,
+              body,
+              draft: false,
+              prerelease: false,
+            });
 
       - name: Write workflow summary
         run: |
           {
-            echo "## npm release published"
+            echo "## npm stable release published"
             echo
+            echo "- PR: \`#${{ steps.release_pr.outputs.number }}\`"
+            echo "- Release kind: \`${{ steps.release_line.outputs.kind }}\`"
             echo "- Version: \`${{ steps.version.outputs.version }}\`"
             echo "- Dist-tag: \`latest\`"
             echo "- Install: \`pnpm add -g miniprogram-minium-cli\`"

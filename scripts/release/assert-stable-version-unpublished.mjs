@@ -27,7 +27,7 @@ if (typeof packageName !== "string" || packageName.trim().length === 0) {
 const publishedVersion = await queryPublishedVersion(packageName, version, registry);
 if (publishedVersion === version) {
   fail(
-    `Stable version ${packageName}@${version} is already published to npm. Bump package.json.version to the next intended stable release before publishing beta or canary builds.`,
+    `Stable version ${packageName}@${version} is already published to npm. Update the release line version before attempting another stable release.`,
   );
 }
 

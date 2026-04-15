@@ -93,11 +93,12 @@ If you change runtime behavior, also verify the affected execution path manually
 
 ## Release Workflow Expectations
 
-- `package.json.version` represents the next intended stable release, not the current prerelease iteration.
-- Update the next stable version through a normal PR before relying on automated prerelease publishing from `main`.
-- Merged changes on `main` publish prerelease builds to npm `next`.
-- Stable releases are published only from matching `v*` tags, and the workflow must see the same version in `package.json`.
-- After publishing a stable release, open a follow-up PR to move `package.json.version` to the next stable target.
+- `main` represents the current stable release and should only receive formal release PRs from `hotfix/*`, `release/*`, or `next/*`.
+- `package.json.version` on each active release line must match the line version exactly and represent the target stable release for that line.
+- Same-repository PR heads publish `canary` builds, `release/*` publishes beta builds to npm `next`, and `next/*` publishes alpha builds to npm `alpha`.
+- Stable releases are published after a merged formal release PR reaches `main`; the workflow then publishes npm `latest`, creates the tag, and creates the GitHub Release.
+- Stable releases require a matching `CHANGELOG.md` entry for the version being published; missing changelog content must fail the release workflow.
+- After PATCH or MINOR stable releases, forward-port applicable fixes into the active `release/*` and `next/*` lines.
 - Prefer npm trusted publishing for GitHub Actions. If it is not available yet, use `NPM_TOKEN` only as a temporary fallback.
 
 ## Commit Message Rules
