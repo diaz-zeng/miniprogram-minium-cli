@@ -1,8 +1,13 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { execFile as execFileCallback } from "node:child_process";
+import { promisify } from "node:util";
 
 const STABLE_VERSION_PATTERN = /^\d+\.\d+\.\d+$/u;
 const PRERELEASE_PART_PATTERN = /^[0-9A-Za-z-]+$/u;
+const RELEASE_BRANCH_PATTERN = /^(next|release|hotfix)\/(\d+\.\d+\.\d+)$/u;
+const NOT_PUBLISHED_PATTERN = /E404|404 Not Found|No match found for version|is not in this registry/u;
+const execFile = promisify(execFileCallback);
 
 export function parseArgs(argv) {
   const args = {};
@@ -63,8 +68,90 @@ export function sanitizePrereleasePart(value, fallback) {
   return candidate;
 }
 
+export function parseReleaseBranch(branchRef, context = "branch ref") {
+  const candidate = (branchRef ?? "").trim();
+  const match = RELEASE_BRANCH_PATTERN.exec(candidate);
+  if (!match) {
+    fail(
+      `${context} must match next/x.y.z, release/x.y.z, or hotfix/x.y.z. Received: ${candidate || "<empty>"}`,
+    );
+  }
+
+  const [, prefix, version] = match;
+  const kind =
+    prefix === "next" ? "major" : prefix === "release" ? "minor" : "patch";
+  const prereleaseId =
+    prefix === "next" ? "alpha" : prefix === "release" ? "beta" : null;
+  const distTag =
+    prefix === "next" ? "alpha" : prefix === "release" ? "next" : "latest";
+
+  return {
+    branch: candidate,
+    prefix,
+    version,
+    kind,
+    prereleaseId,
+    distTag,
+  };
+}
+
+export function formatKeyValueOutput(values) {
+  return Object.entries(values)
+    .map(([key, value]) => `${key}=${value ?? ""}`)
+    .join("\n");
+}
+
+function parsePublishedVersion(stdout) {
+  const trimmed = stdout.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    return typeof parsed === "string" ? parsed : null;
+  } catch {
+    return trimmed;
+  }
+}
+
+export async function queryPublishedVersion(packageName, version, registry) {
+  const mockedResult = process.env.MINIUM_RELEASE_MOCK_NPM_VIEW_RESULT?.trim();
+  if (mockedResult === "exists") {
+    return version;
+  }
+  if (mockedResult === "missing") {
+    return null;
+  }
+  if (mockedResult) {
+    fail(
+      `Unsupported MINIUM_RELEASE_MOCK_NPM_VIEW_RESULT value: ${mockedResult}. Expected "exists" or "missing".`,
+    );
+  }
+
+  try {
+    const { stdout } = await execFile("npm", [
+      "view",
+      `${packageName}@${version}`,
+      "version",
+      "--json",
+      "--registry",
+      registry,
+    ]);
+    return parsePublishedVersion(stdout);
+  } catch (error) {
+    const details = `${error.stdout ?? ""}\n${error.stderr ?? ""}`.trim();
+    if (NOT_PUBLISHED_PATTERN.test(details)) {
+      return null;
+    }
+
+    fail(
+      `Failed to query npm registry for ${packageName}@${version}. ${details || error.message}`,
+    );
+  }
+}
+
 export function fail(message) {
   console.error(message);
   process.exit(1);
 }
-

@@ -93,13 +93,13 @@ pnpm test
 
 ## 发布流程要求
 
-- `package.json.version` 表示下一个目标正式版，而不是当前某一次预发布迭代号。
-- 如果要开始新的发布周期，应先通过常规 PR 更新下一个正式版本，再依赖 `main` 上的自动预发布。
+- `main` 表示当前稳定版本，只应接收来自 `hotfix/*`、`release/*`、`next/*` 的正式发布 PR。
+- 每条活跃版本线中的 `package.json.version` 必须与分支版本完全一致，并表示该版本线的目标正式版。
 - 同仓库 PR 源分支上的 push 会自动发布 npm `canary` 通道，用于验证该 PR 的最新构建。
-- 合入到 `main` 的变更会自动发布到 npm `next` 通道。
-- 如果 `package.json.version` 对应的稳定版已经正式发布到 npm，`canary` 和 `next` workflow 都会失败，必须先把版本推进到下一个目标正式版。
-- 正式版只通过匹配的 `v*` tag 发布，且 workflow 必须看到与 `package.json` 完全一致的版本号。
-- 正式版发布完成后，应再开一个后续 PR，把 `package.json.version` 推进到下一目标正式版。
+- `release/*` 分支上的 push 会自动发布 MINOR beta 到 npm `next`，`next/*` 分支上的 push 会自动发布 MAJOR alpha 到 npm `alpha`。
+- 正式版在正式发布 PR 合入 `main` 后发布到 npm `latest`，并由 workflow 自动创建 tag 和 GitHub Release。
+- 如果当前版本在 `CHANGELOG.md` 中没有对应章节，正式发布 workflow 必须失败，而不是创建空的 Release。
+- 每次 PATCH 或 MINOR 正式发布后，都应把适用修复继续前向同步到活跃的 `release/*` 和 `next/*` 版本线。
 - GitHub Actions 发布优先使用 npm trusted publishing；如果暂时无法配置，再把 `NPM_TOKEN` 作为临时兜底方案。
 
 ## 提交信息规范

@@ -15,7 +15,24 @@ const assertUnpublishedBaseScript = path.join(
   "release",
   "assert-unpublished-base-version.mjs",
 );
-const validateScript = path.join(repoRoot, "scripts", "release", "validate-tag-version.mjs");
+const assertReleaseBranchScript = path.join(
+  repoRoot,
+  "scripts",
+  "release",
+  "assert-release-branch-version.mjs",
+);
+const assertStableUnpublishedScript = path.join(
+  repoRoot,
+  "scripts",
+  "release",
+  "assert-stable-version-unpublished.mjs",
+);
+const extractChangelogScript = path.join(
+  repoRoot,
+  "scripts",
+  "release",
+  "extract-changelog-section.mjs",
+);
 const stageScript = path.join(repoRoot, "scripts", "release", "stage-package.mjs");
 
 async function writePackageJson(targetDir: string, version: string) {
@@ -81,6 +98,49 @@ test("compute-prerelease-version accepts a custom preid for canary publishing", 
     ]);
 
     assert.equal(stdout.trim(), "1.3.0-canary-pr-42.789.3.1234567");
+  } finally {
+    await fs.rm(fixtureDir, { recursive: true, force: true });
+  }
+});
+
+test("assert-release-branch-version accepts a release branch that matches package version", async () => {
+  const fixtureDir = await fs.mkdtemp(path.join(os.tmpdir(), "minium-release-branch-match-"));
+
+  try {
+    await writePackageJson(fixtureDir, "1.5.0");
+
+    const { stdout } = await execFile(process.execPath, [
+      assertReleaseBranchScript,
+      "--package",
+      path.join(fixtureDir, "package.json"),
+      "--branch",
+      "release/1.5.0",
+    ]);
+
+    assert.match(stdout, /kind=minor/);
+    assert.match(stdout, /dist_tag=next/);
+    assert.match(stdout, /prerelease_id=beta/);
+  } finally {
+    await fs.rm(fixtureDir, { recursive: true, force: true });
+  }
+});
+
+test("assert-release-branch-version rejects mismatched branch versions", async () => {
+  const fixtureDir = await fs.mkdtemp(path.join(os.tmpdir(), "minium-release-branch-mismatch-"));
+
+  try {
+    await writePackageJson(fixtureDir, "1.5.0");
+
+    await assert.rejects(
+      execFile(process.execPath, [
+        assertReleaseBranchScript,
+        "--package",
+        path.join(fixtureDir, "package.json"),
+        "--branch",
+        "next/2.0.0",
+      ]),
+      /does not match package\.json version/,
+    );
   } finally {
     await fs.rm(fixtureDir, { recursive: true, force: true });
   }
@@ -152,19 +212,22 @@ test("assert-unpublished-base-version rejects a stable version that is already p
   }
 });
 
-test("validate-tag-version succeeds when tag matches the stable package version", async () => {
+test("assert-stable-version-unpublished succeeds when the stable version is not yet published", async () => {
   const fixtureDir = await fs.mkdtemp(path.join(os.tmpdir(), "minium-release-validate-"));
 
   try {
     await writePackageJson(fixtureDir, "2.0.1");
 
     const { stdout } = await execFile(process.execPath, [
-      validateScript,
+      assertStableUnpublishedScript,
       "--package",
       path.join(fixtureDir, "package.json"),
-      "--tag",
-      "v2.0.1",
-    ]);
+    ], {
+      env: {
+        ...process.env,
+        MINIUM_RELEASE_MOCK_NPM_VIEW_RESULT: "missing",
+      },
+    });
 
     assert.equal(stdout.trim(), "2.0.1");
   } finally {
@@ -172,7 +235,7 @@ test("validate-tag-version succeeds when tag matches the stable package version"
   }
 });
 
-test("validate-tag-version rejects mismatched release tags", async () => {
+test("assert-stable-version-unpublished rejects an already-published stable version", async () => {
   const fixtureDir = await fs.mkdtemp(path.join(os.tmpdir(), "minium-release-validate-mismatch-"));
 
   try {
@@ -180,13 +243,82 @@ test("validate-tag-version rejects mismatched release tags", async () => {
 
     await assert.rejects(
       execFile(process.execPath, [
-        validateScript,
+        assertStableUnpublishedScript,
         "--package",
         path.join(fixtureDir, "package.json"),
-        "--tag",
-        "v2.0.2",
+      ], {
+        env: {
+          ...process.env,
+          MINIUM_RELEASE_MOCK_NPM_VIEW_RESULT: "exists",
+        },
+      }),
+      /already published to npm/,
+    );
+  } finally {
+    await fs.rm(fixtureDir, { recursive: true, force: true });
+  }
+});
+
+test("extract-changelog-section returns the requested release section", async () => {
+  const fixtureDir = await fs.mkdtemp(path.join(os.tmpdir(), "minium-release-changelog-"));
+
+  try {
+    const changelogPath = path.join(fixtureDir, "CHANGELOG.md");
+    await fs.writeFile(
+      changelogPath,
+      [
+        "# Changelog",
+        "",
+        "## [Unreleased]",
+        "",
+        "## [1.5.0] - 2026-04-15",
+        "",
+        "### Added",
+        "",
+        "- New release flow.",
+        "",
+        "## [1.4.0] - 2026-04-01",
+        "",
+        "### Added",
+        "",
+        "- Previous release flow.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const { stdout } = await execFile(process.execPath, [
+      extractChangelogScript,
+      "--changelog",
+      changelogPath,
+      "--version",
+      "1.5.0",
+    ]);
+
+    assert.match(stdout, /^## \[1\.5\.0\] - 2026-04-15/m);
+    assert.match(stdout, /New release flow/);
+    assert.doesNotMatch(stdout, /Previous release flow/);
+  } finally {
+    await fs.rm(fixtureDir, { recursive: true, force: true });
+  }
+});
+
+test("extract-changelog-section rejects missing release sections", async () => {
+  const fixtureDir = await fs.mkdtemp(path.join(os.tmpdir(), "minium-release-changelog-missing-"));
+
+  try {
+    const changelogPath = path.join(fixtureDir, "CHANGELOG.md");
+    await fs.writeFile(changelogPath, "# Changelog\n\n## [1.4.0] - 2026-04-01\n", "utf8");
+
+    await assert.rejects(
+      execFile(process.execPath, [
+        extractChangelogScript,
+        "--changelog",
+        changelogPath,
+        "--version",
+        "1.5.0",
       ]),
-      /does not match package\.json version/,
+      /Could not find changelog entry/,
     );
   } finally {
     await fs.rm(fixtureDir, { recursive: true, force: true });

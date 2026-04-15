@@ -1,16 +1,17 @@
-name: Publish npm prerelease
+name: Publish npm prerelease from release lines
 
 on:
   push:
     branches:
-      - main
+      - "release/*"
+      - "next/*"
 
 permissions:
   contents: read
   id-token: write
 
 concurrency:
-  group: npm-prerelease-main
+  group: npm-prerelease-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -34,9 +35,12 @@ jobs:
           cache: pnpm
           registry-url: https://registry.npmjs.org
 
+      - name: Validate release branch and version
+        id: release_line
+        run: pnpm --silent run release:assert-release-branch -- --branch "$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+
       - name: Ensure stable base version is not already released
         run: pnpm --silent run release:assert-unpublished-base
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -45,8 +49,10 @@ jobs:
 
       - name: Compute prerelease version
         id: version
+        env:
+          PREID: ${{ steps.release_line.outputs.prerelease_id }}
         run: |
-          VERSION="$(pnpm --silent run release:compute-prerelease -- --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" --sha "$GITHUB_SHA")"
+          VERSION="$(pnpm --silent run release:compute-prerelease -- --preid "$PREID" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" --sha "$GITHUB_SHA")"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Computed prerelease version: $VERSION"
 
@@ -65,7 +71,7 @@ jobs:
           if [ -n "${NPM_TOKEN:-}" ]; then
             export NODE_AUTH_TOKEN="$NPM_TOKEN"
           fi
-          if ! npm publish "${{ steps.stage.outputs.package_dir }}" --tag next --provenance --access public; then
+          if ! npm publish "${{ steps.stage.outputs.package_dir }}" --tag "${{ steps.release_line.outputs.dist_tag }}" --provenance --access public; then
             echo "::error::npm prerelease publish failed. Configure npm trusted publishing for this repository or provide NPM_TOKEN as a temporary fallback."
             exit 1
           fi
@@ -75,7 +81,9 @@ jobs:
           {
             echo "## npm prerelease published"
             echo
+            echo "- Branch: \`${{ steps.release_line.outputs.branch }}\`"
+            echo "- Release kind: \`${{ steps.release_line.outputs.kind }}\`"
             echo "- Version: \`${{ steps.version.outputs.version }}\`"
-            echo "- Dist-tag: \`next\`"
-            echo "- Install: \`pnpm add -g miniprogram-minium-cli@next\`"
+            echo "- Dist-tag: \`${{ steps.release_line.outputs.dist_tag }}\`"
+            echo "- Install: \`pnpm add -g miniprogram-minium-cli@${{ steps.release_line.outputs.dist_tag }}\`"
           } >> "$GITHUB_STEP_SUMMARY"

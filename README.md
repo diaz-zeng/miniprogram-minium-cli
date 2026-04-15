@@ -130,41 +130,50 @@ npx skills add diaz-zeng/miniprogram-minium-cli --skill interactive-classname-ta
 
 ## Release Channels
 
-The repository publishes three npm channels:
+The repository publishes four npm channels:
 
-- `canary`: the PR validation channel published from same-repository PR head branches
-- `next`: the integration prerelease channel published automatically from `main` after merged PR changes
-- `latest`: the stable release published from a matching `v*` git tag
+- `canary`: PR validation builds published from same-repository PR head branches
+- `alpha`: MAJOR prerelease builds published from active `next/x.y.z` branches
+- `next`: MINOR beta builds published from active `release/x.y.z` branches
+- `latest`: stable releases published after a formal release PR merges into `main`
 
-Install the prerelease channels explicitly:
+Install prerelease channels explicitly:
 
 ```bash
 pnpm add -g miniprogram-minium-cli@canary
+pnpm add -g miniprogram-minium-cli@alpha
 pnpm add -g miniprogram-minium-cli@next
 ```
 
 ## Maintainer Release Flow
 
-This repository treats `package.json.version` as the source of truth for the next stable release.
+This repository treats `package.json.version` as the source of truth for the target stable version on each active release line.
 
-1. Open a PR that updates `package.json.version` to the next intended stable version, such as `1.3.0`.
-2. While that PR is open, same-repository pushes to the PR head branch publish a unique canary build such as `1.3.0-canary-pr-42.<run-id>.<attempt>.<sha>` to npm `canary`.
-3. Merge feature and fix PRs into `main` as usual. Each merge publishes a unique prerelease such as `1.3.0-beta.<run-id>.<attempt>.<sha>` to npm `next`.
-4. When the release is ready, create and push a matching git tag such as `v1.3.0`. The release workflow validates that the tag matches `package.json.version` before publishing `latest`.
-5. After the stable release lands, open another PR that advances `package.json.version` to the next stable target, such as `1.3.1` or `1.4.0`.
+1. `main` always represents the current stable release and only accepts formal release PRs.
+2. Create `release/x.y.z` for the next MINOR line, `next/x.y.z` for the next MAJOR line, and `hotfix/x.y.z` for PATCH fixes against the current stable line.
+3. Ensure the branch version and `package.json.version` match exactly, for example `release/1.5.0` with `package.json.version = 1.5.0`.
+4. Same-repository PR head branches continue publishing unique canary builds such as `1.5.0-canary-pr-42.<run-id>.<attempt>.<sha>` to npm `canary`.
+5. Pushes on `release/x.y.z` publish MINOR beta builds such as `1.5.0-beta.<run-id>.<attempt>.<sha>` to npm `next`.
+6. Pushes on `next/x.y.z` publish MAJOR alpha builds such as `2.0.0-alpha.<run-id>.<attempt>.<sha>` to npm `alpha`.
+7. When a version line is ready, merge its formal release PR into `main`. The stable workflow validates the merged release branch, publishes npm `latest`, creates the `vX.Y.Z` tag, and creates the GitHub Release.
+8. Stable GitHub Releases use the matching `CHANGELOG.md` section as the primary release body and append auto-generated release notes. If the changelog entry is missing, the stable release fails.
+9. After every PATCH or MINOR stable release, forward-port the applicable fixes into the currently active `release/*` and `next/*` lines.
 
-Important release guard:
+Important release guards:
 
-- If the stable version in `package.json` is already published to npm, the `canary` and `next` workflows fail before `npm publish`.
-- In that case, bump `package.json.version` to the next intended stable release before pushing more PR or `main` changes.
-- The floating `@canary` tag always points to the latest canary publish across PRs. If you need a specific PR build, install the full version string instead of relying on `@canary`.
+- If the stable version in an active release line is already published to npm, the `canary`, `alpha`, and `next` prerelease workflows fail before `npm publish`.
+- If the stable release cannot resolve a merged release PR into `main`, the workflow fails closed instead of publishing.
+- If the stable release cannot find the current version section in `CHANGELOG.md`, the workflow fails closed instead of creating the GitHub Release.
+- The floating `@canary`, `@alpha`, and `@next` dist-tags always point to the latest successful publish for that channel. Install the full version string if you need a specific build.
 
 For local debugging of the release helpers:
 
 ```bash
+pnpm run release:assert-release-branch -- --branch release/1.5.0
 pnpm run release:assert-unpublished-base
-pnpm run release:compute-prerelease -- --run-id 123 --run-attempt 1 --sha abcdef1
-pnpm run release:validate-tag -- --tag v1.2.0
+pnpm run release:assert-stable-unpublished
+pnpm run release:compute-prerelease -- --preid beta --run-id 123 --run-attempt 1 --sha abcdef1
+pnpm run release:extract-changelog -- --version 1.5.0
 ```
 
 GitHub Actions publishing is designed for npm trusted publishing first. If trusted publishing is not configured yet, the publish steps also accept `NPM_TOKEN` as a temporary fallback through repository secrets.
