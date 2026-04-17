@@ -375,6 +375,27 @@ class MiniumRuntimeAdapter:
         self._ensure_network_runtime_supported(session_metadata)
         self._ensure_real_network_controls(session_metadata, network_state)
 
+    def ensure_network_observation(
+        self,
+        session_metadata: dict[str, Any],
+        network_state: NetworkState,
+    ) -> None:
+        """Ensure real-runtime network hooks are ready when supported."""
+        driver = session_metadata.get("runtime_driver")
+        if driver is None:
+            return
+        app = session_metadata.get("runtime_app")
+        if app is None:
+            app = getattr(driver, "app", None)
+            session_metadata["runtime_app"] = app
+        if app is None:
+            return
+        if not callable(getattr(app, "hook_wx_method", None)) or not callable(
+            getattr(app, "release_hook_wx_method", None)
+        ):
+            return
+        self._ensure_real_network_controls(session_metadata, network_state)
+
     def stop_network_listener(
         self,
         session_metadata: dict[str, Any],
@@ -404,8 +425,23 @@ class MiniumRuntimeAdapter:
         if listener is None:
             return 0
         cleared_ids = set(listener.matched_event_ids)
-        cleared_count = len(cleared_ids)
-        network_state.events = [event for event in network_state.events if event.event_id not in cleared_ids]
+        retained_events: list[NetworkEvent] = []
+        cleared_count = 0
+        for event in network_state.events:
+            if event.event_id not in cleared_ids:
+                retained_events.append(event)
+                continue
+            remaining_listener_ids = [
+                current_listener_id
+                for current_listener_id in event.listener_ids
+                if current_listener_id != listener_id
+            ]
+            if remaining_listener_ids:
+                event.listener_ids = remaining_listener_ids
+                retained_events.append(event)
+                continue
+            cleared_count += 1
+        network_state.events = retained_events
         listener.matched_event_ids.clear()
         listener.hit_count = 0
         return cleared_count
