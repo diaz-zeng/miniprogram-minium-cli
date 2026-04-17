@@ -72,6 +72,179 @@ test("validatePlan accepts supported bridge step types", () => {
   assert.equal(validation.ok, true);
 });
 
+test("validatePlan accepts supported network step types", () => {
+  const validation = validatePlan({
+    version: PLAN_VERSION,
+    kind: PLAN_KIND,
+    metadata: { draft: false, name: "network-demo" },
+    execution: { mode: "serial", failFast: true },
+    environment: {
+      projectPath: "/tmp/demo-miniapp",
+      artifactsDir: null,
+      wechatDevtoolPath: null,
+      testPort: 9420,
+      language: "en",
+    },
+    steps: [
+      {
+        id: "step-1",
+        type: "session.start",
+        input: { projectPath: "/tmp/demo-miniapp" },
+      },
+      {
+        id: "step-2",
+        type: "network.listen.start",
+        input: {
+          listenerId: "home-requests",
+          captureResponses: true,
+          matcher: {
+            urlPattern: "/api/",
+            method: "POST",
+            headers: { "x-demo": "1" },
+          },
+        },
+      },
+      {
+        id: "step-3",
+        type: "network.wait",
+        input: {
+          listenerId: "home-requests",
+          event: "request",
+          timeoutMs: 1500,
+        },
+      },
+      {
+        id: "step-4",
+        type: "assert.networkRequest",
+        input: {
+          matcher: {
+            url: "/api/orders",
+            query: { id: "123" },
+          },
+          minCount: 1,
+        },
+      },
+      {
+        id: "step-5",
+        type: "assert.networkResponse",
+        input: {
+          matcher: {
+            url: "/api/orders",
+            statusCode: 200,
+          },
+          count: 1,
+        },
+      },
+      {
+        id: "step-6",
+        type: "network.intercept.add",
+        input: {
+          ruleId: "orders-mock",
+          matcher: {
+            url: "/api/orders",
+            method: "GET",
+          },
+          behavior: {
+            action: "mock",
+            response: {
+              statusCode: 200,
+              headers: { "content-type": "application/json" },
+              body: { ok: true },
+            },
+          },
+        },
+      },
+      {
+        id: "step-7",
+        type: "network.intercept.remove",
+        input: { ruleId: "orders-mock" },
+      },
+      {
+        id: "step-8",
+        type: "network.listen.stop",
+        input: { listenerId: "home-requests" },
+      },
+      {
+        id: "step-9",
+        type: "network.intercept.clear",
+        input: {},
+      },
+    ],
+  });
+
+  assert.equal(validation.ok, true);
+});
+
+test("validatePlan rejects invalid network matcher shapes", () => {
+  const validation = validatePlan({
+    version: PLAN_VERSION,
+    kind: PLAN_KIND,
+    metadata: { draft: false, name: "invalid-network-matcher" },
+    execution: { mode: "serial", failFast: true },
+    environment: {
+      projectPath: "/tmp/demo-miniapp",
+      artifactsDir: null,
+      wechatDevtoolPath: null,
+      testPort: 9420,
+      language: "en",
+    },
+    steps: [
+      {
+        id: "step-1",
+        type: "network.wait",
+        input: {
+          matcher: "not-an-object",
+        },
+      },
+    ],
+  });
+
+  assert.equal(validation.ok, false);
+  assert.match(validation.errors.join("\n"), /network\.wait matcher must be an object/);
+});
+
+test("validatePlan rejects invalid intercept behavior and conflicting assertion counts", () => {
+  const validation = validatePlan({
+    version: PLAN_VERSION,
+    kind: PLAN_KIND,
+    metadata: { draft: false, name: "invalid-network-intercept" },
+    execution: { mode: "serial", failFast: true },
+    environment: {
+      projectPath: "/tmp/demo-miniapp",
+      artifactsDir: null,
+      wechatDevtoolPath: null,
+      testPort: 9420,
+      language: "en",
+    },
+    steps: [
+      {
+        id: "step-1",
+        type: "assert.networkRequest",
+        input: {
+          count: 1,
+          minCount: 1,
+        },
+      },
+      {
+        id: "step-2",
+        type: "network.intercept.add",
+        input: {
+          matcher: {
+            urlPattern: "/api/",
+          },
+          behavior: {
+            action: "delay",
+          },
+        },
+      },
+    ],
+  });
+
+  assert.equal(validation.ok, false);
+  assert.match(validation.errors.join("\n"), /cannot combine count with minCount or maxCount/);
+  assert.match(validation.errors.join("\n"), /behavior\.delayMs must be numeric/);
+});
+
 test("loadPlanFromFile resolves relative environment paths from the plan directory", () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "minium-cli-plan-relative-"));
   const nestedDir = path.join(tempDir, "plans");

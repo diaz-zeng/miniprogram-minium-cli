@@ -8,6 +8,22 @@
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-04-17
+
+### Added
+
+- 新增结构化网络观测能力，支持在 miniapp 执行计划中使用 `network.listen.start`、`network.listen.stop`、`network.listen.clear`、`network.wait`、`assert.networkRequest` 与 `assert.networkResponse`。
+- 新增结构化网络拦截能力，支持通过 `network.intercept.add`、`network.intercept.remove` 与 `network.intercept.clear` 实现 mock、fail、delay 等行为。
+- 新增网络能力专项回归计划：`examples/demo-regression/12-network-observation.placeholder.plan.json`、`13-network-failure.placeholder.plan.json`、`14-network-transfer.placeholder.plan.json`。
+- 新增网络请求控制相关的 OpenSpec 变更制品，位于 `openspec/changes/add-network-request-controls/`。
+
+### Changed
+
+- placeholder 运行时现在会为 bridge 驱动的文件与导航流程记录网络请求/响应事件，使随仓库计划能够端到端断言网络行为。
+- 真实 Minium 运行时现在会为基于 listener 和仅依赖 matcher 的网络等待/断言初始化网络观测 hook，并兼容缺失 callback id 的运行时实现。
+- listener 生命周期处理已增强：清理单个 listener 时会保留共享观测结果，同时避免复用同名 `listenerId` 时误读旧事件。
+- 产品 skill、API 参考、README 指引与随仓库示例现已同步覆盖新的网络观测与拦截工作流。
+
 ## [1.2.2] - 2026-04-15
 
 ### Changed

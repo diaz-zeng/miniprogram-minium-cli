@@ -39,10 +39,11 @@
 - 通过 `--plan-json` 执行内联 JSON 计划
 - 精确定位与模糊文本匹配
 - 点击、输入、等待与断言
+- 面向 `wx.request`、`wx.uploadFile`、`wx.downloadFile` 的网络监听与拦截能力，支持监听、等待、断言、失败注入、延迟和 mock 返回
 - 通过结构化 bridge 步骤调用存储、路由、应用上下文、设置、剪贴板、反馈 UI、定位、媒体、文件、设备、鉴权与订阅等小程序能力
 - 显式截图与自动截图
 - 单指和多指手势
-- 产出 `summary.json`、`result.json`、`comparison.json` 以及截图文件
+- 产出 `summary.json`、`result.json`、`comparison.json`、`network.json` 以及截图文件
 
 ## Step 分类
 
@@ -50,12 +51,30 @@
 
 - 会话与产物步骤，例如 `session.start`、`artifact.screenshot`、`session.close`
 - UI 步骤，例如 `element.click`、`element.input`、`page.read`、`wait.for`、`gesture.*`
+- 网络步骤，例如 `network.listen.start`、`network.wait`、`network.intercept.add`、`assert.networkRequest`、`assert.networkResponse`
 - bridge 步骤，例如 `storage.set`、`navigation.navigateTo`、`clipboard.get`、`settings.authorize`、`auth.login`、`location.get`
 - 断言步骤，例如 `assert.pagePath`、`assert.elementText`、`assert.elementVisible`
 
 bridge 步骤通过结构化 step type 暴露一组受控的小程序原生能力，而不是直接透传原始 `wx` 方法调用。
 
 完整的 step 列表和每个 step 的输入字段请查看 [API_REFERENCE.zh-CN.md](./API_REFERENCE.zh-CN.md)。
+
+## 网络能力
+
+网络步骤允许 plan 在不写任意脚本的前提下，观察和控制请求行为。
+
+- 使用 `network.listen.start` 和 `network.listen.stop` 管理会话级网络证据收集
+- 使用 `network.wait`、`assert.networkRequest`、`assert.networkResponse` 断言某个动作后是否发出了目标请求或收到了目标响应
+- 使用 `network.intercept.add`、`network.intercept.remove`、`network.intercept.clear` 对匹配请求执行透传、失败、延迟或 mock 返回
+- 当你需要完整证据时，查看 `network.json`，其中包含归一化网络事件、监听器命中信息和拦截规则命中统计
+
+常见 matcher 字段包括 `url`、`urlPattern`、`method`、`resourceType`、`query`、`headers`、`body`、`statusCode`、`responseHeaders` 和 `responseBody`。
+
+当前运行时说明：
+
+- placeholder 模式为仓库自带示例和回归计划提供确定性的内存态网络事件
+- real runtime 通过 Minium hook 接入 `wx.request`、`wx.uploadFile`、`wx.downloadFile`
+- 响应体断言仍然属于 best-effort，最终能断言到什么字段取决于底层运行时 callback 实际暴露的数据
 
 ## 计划输入
 

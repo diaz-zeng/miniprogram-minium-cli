@@ -39,10 +39,11 @@ The current product supports:
 - plan execution from inline JSON through `--plan-json`
 - exact selectors and fuzzy text matching
 - clicks, text input, waits, and assertions
+- network observation and interception for `wx.request`, `wx.uploadFile`, and `wx.downloadFile`, including listener, wait, assertion, fail, delay, and mock controls
 - bridge-backed miniapp actions for storage, navigation, app context, settings, clipboard, feedback UI, location, media, file, device, auth, and subscription flows
 - explicit screenshots and automatic screenshots
 - single-finger and multi-finger gestures
-- structured outputs including `summary.json`, `result.json`, `comparison.json`, and screenshot files
+- structured outputs including `summary.json`, `result.json`, `comparison.json`, `network.json`, and screenshot files
 
 ## Step Categories
 
@@ -50,12 +51,30 @@ Automation plans combine four step categories:
 
 - session and artifact steps such as `session.start`, `artifact.screenshot`, and `session.close`
 - UI steps such as `element.click`, `element.input`, `page.read`, `wait.for`, and `gesture.*`
+- network steps such as `network.listen.start`, `network.wait`, `network.intercept.add`, `assert.networkRequest`, and `assert.networkResponse`
 - bridge-backed steps such as `storage.set`, `navigation.navigateTo`, `clipboard.get`, `settings.authorize`, `auth.login`, and `location.get`
 - assertion steps such as `assert.pagePath`, `assert.elementText`, and `assert.elementVisible`
 
 Bridge-backed steps expose a controlled subset of mini program native capabilities through structured plan types instead of a raw `wx` method passthrough.
 
 For the full step catalog and per-step input fields, see [API_REFERENCE.md](./docs/API_REFERENCE.md).
+
+## Network Controls
+
+Network steps let a plan observe or control request-side behavior without dropping into ad hoc scripts.
+
+- use `network.listen.start` and `network.listen.stop` to scope evidence collection to a session
+- use `network.wait`, `assert.networkRequest`, and `assert.networkResponse` to verify that a click or bridge step emitted the expected request or response
+- use `network.intercept.add`, `network.intercept.remove`, and `network.intercept.clear` to continue, fail, delay, or mock matching requests
+- inspect `network.json` when you need the normalized event log, matched listener IDs, and interception hit counts
+
+Typical network matcher fields include `url`, `urlPattern`, `method`, `resourceType`, `query`, `headers`, `body`, `statusCode`, `responseHeaders`, and `responseBody`.
+
+Current runtime notes:
+
+- placeholder mode provides deterministic in-memory network events for bundled examples and regression plans
+- real runtime is wired through Minium hooks for `wx.request`, `wx.uploadFile`, and `wx.downloadFile`
+- response-body assertions remain best-effort because Minium only exposes what the underlying runtime callback returns
 
 ## Plan Input
 

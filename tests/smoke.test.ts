@@ -217,6 +217,278 @@ test("placeholder bridge actions pass end-to-end and expose structured outputs",
   );
 });
 
+test("placeholder network observation and interception steps pass end-to-end", async () => {
+  const artifactsDir = createArtifactsDir("minium-cli-network");
+  const plan: Plan = {
+    ...createBasePlan(artifactsDir),
+    metadata: {
+      name: "network-smoke",
+      draft: false,
+    },
+    steps: [
+      { id: "step-1", type: "session.start", input: { projectPath: "." } },
+      { id: "step-2", type: "network.listen.start", input: { listenerId: "network-all", captureResponses: true } },
+      { id: "step-3", type: "element.click", input: { locator: { type: "id", value: "login-button" } } },
+      { id: "step-4", type: "network.wait", input: { listenerId: "network-all", event: "request", timeoutMs: 100 } },
+      { id: "step-5", type: "assert.networkRequest", input: { listenerId: "network-all", matcher: { url: "/api/login", method: "POST" }, count: 1 } },
+      {
+        id: "step-6",
+        type: "network.intercept.add",
+        input: {
+          ruleId: "reviews-mock",
+          matcher: { url: "/api/reviews", method: "GET" },
+          behavior: {
+            action: "mock",
+            response: {
+              statusCode: 503,
+              headers: { "content-type": "application/json" },
+              body: { ok: false, source: "mock" },
+            },
+          },
+        },
+      },
+      { id: "step-7", type: "element.click", input: { locator: { type: "id", value: "home-to-review-board-button" } } },
+      {
+        id: "step-8",
+        type: "network.wait",
+        input: {
+          listenerId: "network-all",
+          event: "response",
+          matcher: { url: "/api/reviews", statusCode: 503 },
+          timeoutMs: 100,
+        },
+      },
+      {
+        id: "step-9",
+        type: "assert.networkResponse",
+        input: {
+          listenerId: "network-all",
+          matcher: { url: "/api/reviews", statusCode: 503, responseBody: { ok: false } },
+          count: 1,
+        },
+      },
+      { id: "step-10", type: "network.intercept.clear", input: {} },
+      { id: "step-11", type: "session.close", input: {} },
+    ],
+  };
+
+  const execution = await executePlanWithPython(plan);
+  assert.equal(execution.response.ok, true);
+  const result = execution.response.result as Record<string, unknown>;
+  const summary = result.summary as Record<string, unknown>;
+  const stepResults = result.stepResults as Array<Record<string, unknown>>;
+  const artifacts = result.artifacts as Record<string, unknown>;
+  const network = result.network as Record<string, unknown>;
+
+  assert.equal(summary.status, "passed");
+  assert.equal(summary.networkEventCount, 4);
+  assert.ok(fs.existsSync(String(artifacts.networkPath)));
+  assert.equal(network.eventCount, 4);
+  assert.equal(
+    (stepResults[4]?.output as Record<string, unknown>).matched_count,
+    1,
+  );
+  assert.equal(
+    (stepResults[8]?.output as Record<string, unknown>).matched_count,
+    1,
+  );
+});
+
+test("placeholder network ordered assertions compare event sequence instead of event id text", async () => {
+  const artifactsDir = createArtifactsDir("minium-cli-network-order");
+  const plan: Plan = {
+    ...createBasePlan(artifactsDir),
+    metadata: {
+      name: "network-order-smoke",
+      draft: false,
+    },
+    steps: [
+      {
+        id: "step-1",
+        type: "session.start",
+        input: {
+          projectPath: ".",
+          initialPagePath: "/pages/home/index",
+        },
+      },
+      { id: "step-2", type: "network.listen.start", input: { listenerId: "home-network", captureResponses: true } },
+      { id: "step-3", type: "element.click", input: { locator: { type: "id", value: "network-login-request-button" } } },
+      {
+        id: "step-4",
+        type: "network.wait",
+        input: {
+          listenerId: "home-network",
+          event: "response",
+          timeoutMs: 100,
+          matcher: { url: "https://service.invalid/api/login", method: "POST", statusCode: 200 },
+        },
+      },
+      { id: "step-5", type: "element.click", input: { locator: { type: "id", value: "network-reviews-request-button" } } },
+      {
+        id: "step-6",
+        type: "assert.networkRequest",
+        input: {
+          listenerId: "home-network",
+          matcher: { url: "https://service.invalid/api/reviews", method: "GET" },
+          count: 1,
+          orderedAfter: "response-2",
+        },
+      },
+      { id: "step-7", type: "session.close", input: {} },
+    ],
+  };
+
+  const execution = await executePlanWithPython(plan);
+  assert.equal(execution.response.ok, true);
+  const result = execution.response.result as Record<string, unknown>;
+  const summary = result.summary as Record<string, unknown>;
+  const stepResults = result.stepResults as Array<Record<string, unknown>>;
+
+  assert.equal(summary.status, "passed");
+  assert.equal(stepResults[5]?.status, "passed");
+  assert.deepEqual(
+    (stepResults[5]?.output as Record<string, unknown>).matched_event_ids,
+    ["request-3"],
+  );
+});
+
+test("placeholder network wait timeout returns a structured action error", async () => {
+  const artifactsDir = createArtifactsDir("minium-cli-network-timeout");
+  const plan: Plan = {
+    ...createBasePlan(artifactsDir),
+    metadata: {
+      name: "network-timeout",
+      draft: false,
+    },
+    steps: [
+      { id: "step-1", type: "session.start", input: { projectPath: "." } },
+      { id: "step-2", type: "network.listen.start", input: { listenerId: "network-all", captureResponses: true } },
+      {
+        id: "step-3",
+        type: "network.wait",
+        input: {
+          listenerId: "network-all",
+          event: "response",
+          timeoutMs: 20,
+          matcher: { url: "/api/never-happens" },
+        },
+      },
+      { id: "step-4", type: "session.close", input: {} },
+    ],
+  };
+
+  const execution = await executePlanWithPython(plan);
+  assert.equal(execution.response.ok, true);
+  const result = execution.response.result as Record<string, unknown>;
+  const summary = result.summary as Record<string, unknown>;
+  const stepResults = result.stepResults as Array<Record<string, unknown>>;
+  const failure = summary.failure as Record<string, unknown>;
+
+  assert.equal(summary.status, "failed");
+  assert.equal(failure.error_code, "ACTION_ERROR");
+  assert.equal(stepResults[2]?.status, "failed");
+  assert.equal(
+    ((stepResults[2]?.error as Record<string, unknown>).error_code),
+    "ACTION_ERROR",
+  );
+});
+
+test("placeholder network listen clear preserves events still referenced by other listeners", async () => {
+  const artifactsDir = createArtifactsDir("minium-cli-network-clear-shared");
+  const plan: Plan = {
+    ...createBasePlan(artifactsDir),
+    metadata: {
+      name: "network-clear-shared",
+      draft: false,
+    },
+    steps: [
+      { id: "step-1", type: "session.start", input: { projectPath: "." } },
+      { id: "step-2", type: "network.listen.start", input: { listenerId: "network-all", captureResponses: true } },
+      {
+        id: "step-3",
+        type: "network.listen.start",
+        input: {
+          listenerId: "login-only",
+          matcher: { url: "/api/login", method: "POST" },
+        },
+      },
+      { id: "step-4", type: "element.click", input: { locator: { type: "id", value: "login-button" } } },
+      { id: "step-5", type: "network.listen.clear", input: { listenerId: "login-only" } },
+      {
+        id: "step-6",
+        type: "assert.networkRequest",
+        input: {
+          listenerId: "network-all",
+          matcher: { url: "/api/login", method: "POST" },
+          count: 1,
+        },
+      },
+      { id: "step-7", type: "session.close", input: {} },
+    ],
+  };
+
+  const execution = await executePlanWithPython(plan);
+  assert.equal(execution.response.ok, true);
+  const result = execution.response.result as Record<string, unknown>;
+  const summary = result.summary as Record<string, unknown>;
+  const stepResults = result.stepResults as Array<Record<string, unknown>>;
+
+  assert.equal(summary.status, "passed");
+  assert.equal(
+    (stepResults[4]?.output as Record<string, unknown>).cleared_event_count,
+    0,
+  );
+  assert.equal(
+    (stepResults[4]?.output as Record<string, unknown>).remaining_event_count,
+    2,
+  );
+  assert.equal(
+    (stepResults[5]?.output as Record<string, unknown>).matched_count,
+    1,
+  );
+});
+
+test("placeholder listener id reuse does not match stale events from a stopped listener", async () => {
+  const artifactsDir = createArtifactsDir("minium-cli-network-listener-reuse");
+  const plan: Plan = {
+    ...createBasePlan(artifactsDir),
+    metadata: {
+      name: "network-listener-reuse",
+      draft: false,
+    },
+    steps: [
+      { id: "step-1", type: "session.start", input: { projectPath: "." } },
+      { id: "step-2", type: "network.listen.start", input: { listenerId: "network-all", captureResponses: true } },
+      { id: "step-3", type: "element.click", input: { locator: { type: "id", value: "login-button" } } },
+      { id: "step-4", type: "network.listen.stop", input: { listenerId: "network-all" } },
+      { id: "step-5", type: "network.listen.start", input: { listenerId: "network-all", captureResponses: true } },
+      {
+        id: "step-6",
+        type: "assert.networkRequest",
+        input: {
+          listenerId: "network-all",
+          matcher: { url: "/api/login", method: "POST" },
+          count: 0,
+        },
+      },
+      { id: "step-7", type: "session.close", input: {} },
+    ],
+  };
+
+  const execution = await executePlanWithPython(plan);
+  assert.equal(execution.response.ok, true);
+  const result = execution.response.result as Record<string, unknown>;
+  const summary = result.summary as Record<string, unknown>;
+  const stepResults = result.stepResults as Array<Record<string, unknown>>;
+
+  assert.equal(summary.status, "passed");
+  assert.equal(stepResults[5]?.status, "passed");
+  assert.equal(
+    (stepResults[5]?.output as Record<string, unknown>).matched_count,
+    0,
+  );
+});
+
 test("placeholder navigation.back respects page history after UI-driven transitions", async () => {
   const artifactsDir = createArtifactsDir("minium-cli-nav-stack");
   const plan: Plan = {
@@ -720,6 +992,668 @@ test("real async bridge calls preserve millisecond timeout precision", async () 
   assert.equal(
     (((stepResults[1]?.output as Record<string, unknown>).result as Record<string, unknown>).confirm),
     true,
+  );
+});
+
+test("real runtime network hooks drive observation, mocking, and cleanup", async () => {
+  const workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), "minium-cli-real-network-"));
+  const fakeModuleDir = path.join(workspaceDir, "fake-python");
+  const projectPath = path.join(workspaceDir, "miniapp");
+  const devtoolPath = path.join(workspaceDir, "wechat-devtool");
+  const artifactsDir = path.join(workspaceDir, "artifacts");
+  const cleanupLogPath = path.join(workspaceDir, "network-cleanup-log.json");
+  const testPort = await getAvailablePort();
+
+  fs.mkdirSync(fakeModuleDir, { recursive: true });
+  fs.mkdirSync(projectPath, { recursive: true });
+  fs.writeFileSync(path.join(projectPath, "project.config.json"), "{}\n", "utf8");
+  fs.writeFileSync(
+    path.join(fakeModuleDir, "minium.py"),
+    [
+      "import json",
+      "import re",
+      "from pathlib import Path",
+      "",
+      `LOG_PATH = Path(${JSON.stringify(cleanupLogPath)})`,
+      "",
+      "def _append(event, payload):",
+      "    records = []",
+      "    if LOG_PATH.exists():",
+      "        records = json.loads(LOG_PATH.read_text(encoding='utf-8') or '[]')",
+      "    records.append({'event': event, **payload})",
+      "    LOG_PATH.write_text(json.dumps(records), encoding='utf-8')",
+      "",
+      "def _match_rule(expected, actual):",
+      "    if type(expected) is not type(actual):",
+      "        return False",
+      "    if isinstance(expected, str):",
+      "        if expected == actual:",
+      "            return True",
+      "        if expected == '*':",
+      "            expected = '.*'",
+      "        try:",
+      "            return re.search(expected, actual) is not None",
+      "        except re.error:",
+      "            return False",
+      "    if isinstance(expected, list):",
+      "        if len(expected) != len(actual):",
+      "            return False",
+      "        return all(_match_rule(item, actual[index]) for index, item in enumerate(expected))",
+      "    if isinstance(expected, dict):",
+      "        for key, value in expected.items():",
+      "            if key in {'success', 'fail', '_miniMockType'}:",
+      "                continue",
+      "            if key not in actual or not _match_rule(value, actual[key]):",
+      "                return False",
+      "        return True",
+      "    return expected == actual",
+      "",
+      "class _Page:",
+      "    def __init__(self):",
+      "        self.path = '/pages/bridge-lab/index'",
+      "        self.renderer = 'webview'",
+      "        self.plugin_appid = ''",
+      "",
+      "class _App:",
+      "    def __init__(self):",
+      "        self._page = _Page()",
+      "        self._hooks = {}",
+      "        self._mock_rules = {'request': [], 'uploadFile': [], 'downloadFile': []}",
+      "        self._pending = {}",
+      "        self._message_index = 0",
+      "",
+      "    def get_current_page(self):",
+      "        return self._page",
+      "",
+      "    def navigate_to(self, path):",
+      "        self._page.path = path",
+      "        return self._page",
+      "",
+      "    def hook_wx_method(self, method, before=None, after=None, callback=None, with_id=False):",
+      "        _ = after, with_id",
+      "        hook_id = len(self._hooks.get(method, [])) + 1",
+      "        self._hooks.setdefault(method, []).append({'id': hook_id, 'before': before, 'callback': callback})",
+      "        _append('hook', {'method': method, 'hookId': hook_id})",
+      "        return hook_id",
+      "",
+      "    def release_hook_wx_method(self, method, hook_id=None):",
+      "        hooks = list(self._hooks.get(method, []))",
+      "        if hook_id is None:",
+      "            self._hooks[method] = []",
+      "        else:",
+      "            self._hooks[method] = [item for item in hooks if item['id'] != hook_id]",
+      "        _append('release', {'method': method, 'hookId': hook_id})",
+      "",
+      "    def _mock_network(self, interface, rule, success=None, fail=None, reverse=False):",
+      "        entry = {'rule': dict(rule), 'success': success, 'fail': fail}",
+      "        if reverse:",
+      "            self._mock_rules.setdefault(interface, []).insert(0, entry)",
+      "        else:",
+      "            self._mock_rules.setdefault(interface, []).append(entry)",
+      "        _append('mock', {'method': interface, 'rule': entry['rule']})",
+      "",
+      "    def _restore_network(self, interface):",
+      "        self._mock_rules[interface] = []",
+      "        _append('restore', {'method': interface})",
+      "",
+      "    def call_wx_method_async(self, method, payload):",
+      "        self._message_index += 1",
+      "        message_id = f'async-{self._message_index}'",
+      "        options = dict(payload or {})",
+      "        if method == 'uploadFile':",
+      "            options.setdefault('method', 'POST')",
+      "        elif method == 'downloadFile':",
+      "            options.setdefault('method', 'GET')",
+      "        for hook in list(self._hooks.get(method, [])):",
+      "            callback = hook.get('before')",
+      "            if callable(callback):",
+      "                callback([options, message_id])",
+      "        response = self._default_response(method)",
+      "        for entry in self._mock_rules.get(method, []):",
+      "            if options.get('__miniumCliRuleToken') and options.get('__miniumCliRuleToken') == entry['rule'].get('__miniumCliRuleToken'):",
+      "                response = entry['success'] if entry.get('success') is not None else entry['fail']",
+      "                break",
+      "            if _match_rule(entry['rule'], options):",
+      "                response = entry['success'] if entry.get('success') is not None else entry['fail']",
+      "                break",
+      "        self._pending[message_id] = {'method': method, 'response': response}",
+      "        return message_id",
+      "",
+      "    def get_async_response(self, message_id, timeout=0):",
+      "        _ = timeout",
+      "        pending = self._pending.pop(message_id, None)",
+      "        if pending is None:",
+      "            return None",
+      "        for hook in list(self._hooks.get(pending['method'], [])):",
+      "            callback = hook.get('callback')",
+      "            if callable(callback):",
+      "                callback([pending['response'], message_id])",
+      "        return {'result': {'result': pending['response']}}",
+      "",
+      "    @staticmethod",
+      "    def _default_response(method):",
+      "        if method == 'uploadFile':",
+      "            return {'statusCode': 200, 'data': '{\"ok\":true}', 'errMsg': 'uploadFile:ok'}",
+      "        if method == 'downloadFile':",
+      "            return {'statusCode': 200, 'tempFilePath': '/tmp/real-download.bin', 'errMsg': 'downloadFile:ok'}",
+      "        return {'statusCode': 200}",
+      "",
+      "class Minium:",
+      "    def __init__(self, conf):",
+      "        self.conf = conf",
+      "        self.app = _App()",
+      "",
+      "    def shutdown(self):",
+      "        _append('shutdown', {})",
+      "        return None",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  fs.writeFileSync(
+    devtoolPath,
+    [
+      "#!/bin/sh",
+      "PORT=\"\"",
+      "while [ \"$#\" -gt 0 ]; do",
+      "  if [ \"$1\" = \"--auto-port\" ]; then",
+      "    PORT=\"$2\"",
+      "    shift 2",
+      "  else",
+      "    shift",
+      "  fi",
+      "done",
+      "node -e \"const net=require('net'); const port=Number(process.argv[1]); const server=net.createServer(()=>{}); server.listen(port,'127.0.0.1',()=>{}); setTimeout(()=>server.close(()=>process.exit(0)), 15000);\" \"$PORT\" >/dev/null 2>&1 &",
+      "exit 0",
+      "",
+    ].join("\n"),
+    { encoding: "utf8", mode: 0o755 },
+  );
+
+  const plan: Plan = {
+    ...createBasePlan(artifactsDir),
+    metadata: {
+      name: "real-network-hooks",
+      draft: false,
+    },
+    environment: {
+      projectPath,
+      artifactsDir,
+      wechatDevtoolPath: devtoolPath,
+      testPort,
+      language: "en-US",
+      runtimeMode: "real",
+    },
+    steps: [
+      { id: "step-1", type: "session.start", input: { projectPath, initialPagePath: "/pages/bridge-lab/index" } },
+      { id: "step-2", type: "network.listen.start", input: { listenerId: "real-network", captureResponses: true } },
+      {
+        id: "step-3",
+        type: "network.intercept.add",
+        input: {
+          ruleId: "download-mock",
+          matcher: {
+            resourceType: "download",
+            url: "https://service.invalid/reports/latest.bin",
+            method: "GET",
+          },
+          behavior: {
+            action: "mock",
+            response: {
+              statusCode: 206,
+              headers: { "x-source": "real-test" },
+              body: { tempFilePath: "/tmp/real-mock.bin" },
+            },
+          },
+        },
+      },
+      {
+        id: "step-4",
+        type: "file.upload",
+        input: {
+          url: "https://service.invalid/upload",
+          filePath: "/tmp/bridge-demo.png",
+          name: "artifact",
+        },
+      },
+      {
+        id: "step-5",
+        type: "file.download",
+        input: {
+          url: "https://service.invalid/reports/latest.bin",
+        },
+      },
+      {
+        id: "step-6",
+        type: "assert.networkRequest",
+        input: {
+          listenerId: "real-network",
+          matcher: {
+            resourceType: "upload",
+            method: "POST",
+            url: "https://service.invalid/upload",
+          },
+          count: 1,
+        },
+      },
+      {
+        id: "step-7",
+        type: "assert.networkResponse",
+        input: {
+          listenerId: "real-network",
+          matcher: {
+            resourceType: "download",
+            method: "GET",
+            url: "https://service.invalid/reports/latest.bin",
+            statusCode: 206,
+            responseBody: {
+              tempFilePath: "/tmp/real-mock.bin",
+            },
+          },
+          count: 1,
+        },
+      },
+      { id: "step-8", type: "session.close", input: {} },
+    ],
+  };
+
+  const execution = await executePlanWithPython(plan, {
+    env: {
+      ...process.env,
+      PYTHONPATH: process.env.PYTHONPATH
+        ? `${fakeModuleDir}${path.delimiter}${process.env.PYTHONPATH}`
+        : fakeModuleDir,
+    },
+  });
+
+  assert.equal(execution.response.ok, true);
+  const result = execution.response.result as Record<string, unknown>;
+  const summary = result.summary as Record<string, unknown>;
+  const network = result.network as Record<string, unknown>;
+  const cleanupLog = JSON.parse(fs.readFileSync(cleanupLogPath, "utf8")) as Array<Record<string, unknown>>;
+  const releaseMethods = cleanupLog
+    .filter((entry) => entry.event === "release")
+    .map((entry) => entry.method)
+    .sort();
+  const restoreMethods = cleanupLog
+    .filter((entry) => entry.event === "restore")
+    .map((entry) => entry.method);
+
+  assert.equal(summary.status, "passed");
+  assert.equal(summary.networkEventCount, 4);
+  assert.equal(network.eventCount, 4);
+  assert.deepEqual(releaseMethods, ["downloadFile", "request", "uploadFile"]);
+  assert.ok(restoreMethods.includes("downloadFile"));
+});
+
+test("real runtime matcher-only network waits observe traffic without explicit listeners", async () => {
+  const workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), "minium-cli-real-network-matcher-"));
+  const fakeModuleDir = path.join(workspaceDir, "fake-python");
+  const projectPath = path.join(workspaceDir, "miniapp");
+  const devtoolPath = path.join(workspaceDir, "wechat-devtool");
+  const artifactsDir = path.join(workspaceDir, "artifacts");
+  const testPort = await getAvailablePort();
+
+  fs.mkdirSync(fakeModuleDir, { recursive: true });
+  fs.mkdirSync(projectPath, { recursive: true });
+  fs.writeFileSync(path.join(projectPath, "project.config.json"), "{}\n", "utf8");
+  fs.writeFileSync(
+    path.join(fakeModuleDir, "minium.py"),
+    [
+      "class _Page:",
+      "    def __init__(self):",
+      "        self.path = '/pages/bridge-lab/index'",
+      "        self.renderer = 'webview'",
+      "        self.plugin_appid = ''",
+      "",
+      "class _App:",
+      "    def __init__(self):",
+      "        self._page = _Page()",
+      "        self._hooks = {}",
+      "        self._pending = {}",
+      "        self._message_index = 0",
+      "",
+      "    def get_current_page(self):",
+      "        return self._page",
+      "",
+      "    def navigate_to(self, path):",
+      "        self._page.path = path",
+      "        return self._page",
+      "",
+      "    def hook_wx_method(self, method, before=None, after=None, callback=None, with_id=False):",
+      "        _ = after, with_id",
+      "        hook_id = len(self._hooks.get(method, [])) + 1",
+      "        self._hooks.setdefault(method, []).append({'id': hook_id, 'before': before, 'callback': callback})",
+      "        return hook_id",
+      "",
+      "    def release_hook_wx_method(self, method, hook_id=None):",
+      "        hooks = list(self._hooks.get(method, []))",
+      "        if hook_id is None:",
+      "            self._hooks[method] = []",
+      "        else:",
+      "            self._hooks[method] = [item for item in hooks if item['id'] != hook_id]",
+      "",
+      "    def call_wx_method_async(self, method, payload):",
+      "        self._message_index += 1",
+      "        message_id = f'async-{self._message_index}'",
+      "        options = dict(payload or {})",
+      "        if method == 'uploadFile':",
+      "            options.setdefault('method', 'POST')",
+      "        elif method == 'downloadFile':",
+      "            options.setdefault('method', 'GET')",
+      "        for hook in list(self._hooks.get(method, [])):",
+      "            before = hook.get('before')",
+      "            if callable(before):",
+      "                before([options, message_id])",
+      "        if method == 'uploadFile':",
+      "            response = {'statusCode': 200, 'data': '{\"ok\":true}', 'errMsg': 'uploadFile:ok'}",
+      "        else:",
+      "            response = {'statusCode': 200, 'tempFilePath': '/tmp/matcher-only.bin', 'errMsg': 'downloadFile:ok'}",
+      "        self._pending[message_id] = {'method': method, 'response': response}",
+      "        return message_id",
+      "",
+      "    def get_async_response(self, message_id, timeout=0):",
+      "        _ = timeout",
+      "        pending = self._pending.pop(message_id, None)",
+      "        if pending is None:",
+      "            return None",
+      "        for hook in list(self._hooks.get(pending['method'], [])):",
+      "            callback = hook.get('callback')",
+      "            if callable(callback):",
+      "                callback([pending['response'], message_id])",
+      "        return {'result': {'result': pending['response']}}",
+      "",
+      "class Minium:",
+      "    def __init__(self, conf):",
+      "        self.conf = conf",
+      "        self.app = _App()",
+      "",
+      "    def shutdown(self):",
+      "        return None",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  fs.writeFileSync(
+    devtoolPath,
+    [
+      "#!/bin/sh",
+      "PORT=\"\"",
+      "while [ \"$#\" -gt 0 ]; do",
+      "  if [ \"$1\" = \"--auto-port\" ]; then",
+      "    PORT=\"$2\"",
+      "    shift 2",
+      "  else",
+      "    shift",
+      "  fi",
+      "done",
+      "node -e \"const net=require('net'); const port=Number(process.argv[1]); const server=net.createServer(()=>{}); server.listen(port,'127.0.0.1',()=>{}); setTimeout(()=>server.close(()=>process.exit(0)), 15000);\" \"$PORT\" >/dev/null 2>&1 &",
+      "exit 0",
+      "",
+    ].join("\n"),
+    { encoding: "utf8", mode: 0o755 },
+  );
+
+  const plan: Plan = {
+    ...createBasePlan(artifactsDir),
+    metadata: {
+      name: "real-network-matcher-only",
+      draft: false,
+    },
+    environment: {
+      projectPath,
+      artifactsDir,
+      wechatDevtoolPath: devtoolPath,
+      testPort,
+      language: "en-US",
+      runtimeMode: "real",
+    },
+    steps: [
+      { id: "step-1", type: "session.start", input: { projectPath, initialPagePath: "/pages/bridge-lab/index" } },
+      {
+        id: "step-2",
+        type: "file.upload",
+        input: {
+          url: "https://service.invalid/upload",
+          filePath: "/tmp/bridge-demo.png",
+          name: "artifact",
+        },
+      },
+      {
+        id: "step-3",
+        type: "network.wait",
+        input: {
+          event: "request",
+          matcher: {
+            resourceType: "upload",
+            method: "POST",
+            url: "https://service.invalid/upload",
+          },
+          timeoutMs: 100,
+        },
+      },
+      {
+        id: "step-4",
+        type: "assert.networkResponse",
+        input: {
+          matcher: {
+            resourceType: "upload",
+            method: "POST",
+            url: "https://service.invalid/upload",
+            statusCode: 200,
+          },
+          count: 1,
+        },
+      },
+      { id: "step-5", type: "session.close", input: {} },
+    ],
+  };
+
+  const execution = await executePlanWithPython(plan, {
+    env: {
+      ...process.env,
+      PYTHONPATH: process.env.PYTHONPATH
+        ? `${fakeModuleDir}${path.delimiter}${process.env.PYTHONPATH}`
+        : fakeModuleDir,
+    },
+  });
+
+  assert.equal(execution.response.ok, true);
+  const result = execution.response.result as Record<string, unknown>;
+  const summary = result.summary as Record<string, unknown>;
+  const stepResults = result.stepResults as Array<Record<string, unknown>>;
+
+  assert.equal(summary.status, "passed");
+  assert.equal(
+    (stepResults[2]?.output as Record<string, unknown>).matched_count,
+    1,
+  );
+  assert.equal(
+    (stepResults[3]?.output as Record<string, unknown>).matched_count,
+    1,
+  );
+});
+
+test("real runtime network hooks tolerate missing callback ids", async () => {
+  const workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), "minium-cli-real-network-no-call-id-"));
+  const fakeModuleDir = path.join(workspaceDir, "fake-python");
+  const projectPath = path.join(workspaceDir, "miniapp");
+  const devtoolPath = path.join(workspaceDir, "wechat-devtool");
+  const artifactsDir = path.join(workspaceDir, "artifacts");
+  const testPort = await getAvailablePort();
+
+  fs.mkdirSync(fakeModuleDir, { recursive: true });
+  fs.mkdirSync(projectPath, { recursive: true });
+  fs.writeFileSync(path.join(projectPath, "project.config.json"), "{}\n", "utf8");
+  fs.writeFileSync(
+    path.join(fakeModuleDir, "minium.py"),
+    [
+      "class _Page:",
+      "    def __init__(self):",
+      "        self.path = '/pages/bridge-lab/index'",
+      "        self.renderer = 'webview'",
+      "        self.plugin_appid = ''",
+      "",
+      "class _App:",
+      "    def __init__(self):",
+      "        self._page = _Page()",
+      "        self._hooks = {}",
+      "        self._pending = {}",
+      "        self._message_index = 0",
+      "",
+      "    def get_current_page(self):",
+      "        return self._page",
+      "",
+      "    def navigate_to(self, path):",
+      "        self._page.path = path",
+      "        return self._page",
+      "",
+      "    def hook_wx_method(self, method, before=None, after=None, callback=None, with_id=False):",
+      "        _ = after, with_id",
+      "        hook_id = len(self._hooks.get(method, [])) + 1",
+      "        self._hooks.setdefault(method, []).append({'id': hook_id, 'before': before, 'callback': callback})",
+      "        return hook_id",
+      "",
+      "    def release_hook_wx_method(self, method, hook_id=None):",
+      "        hooks = list(self._hooks.get(method, []))",
+      "        if hook_id is None:",
+      "            self._hooks[method] = []",
+      "        else:",
+      "            self._hooks[method] = [item for item in hooks if item['id'] != hook_id]",
+      "",
+      "    def call_wx_method_async(self, method, payload):",
+      "        self._message_index += 1",
+      "        message_id = f'async-{self._message_index}'",
+      "        options = dict(payload or {})",
+      "        if method == 'uploadFile':",
+      "            options.setdefault('method', 'POST')",
+      "        for hook in list(self._hooks.get(method, [])):",
+      "            before = hook.get('before')",
+      "            if callable(before):",
+      "                before(options)",
+      "        response = {'statusCode': 200, 'data': '{\"ok\":true}', 'errMsg': 'uploadFile:ok'}",
+      "        self._pending[message_id] = {'method': method, 'response': response}",
+      "        return message_id",
+      "",
+      "    def get_async_response(self, message_id, timeout=0):",
+      "        _ = timeout",
+      "        pending = self._pending.pop(message_id, None)",
+      "        if pending is None:",
+      "            return None",
+      "        for hook in list(self._hooks.get(pending['method'], [])):",
+      "            callback = hook.get('callback')",
+      "            if callable(callback):",
+      "                callback(pending['response'])",
+      "        return {'result': {'result': pending['response']}}",
+      "",
+      "class Minium:",
+      "    def __init__(self, conf):",
+      "        self.conf = conf",
+      "        self.app = _App()",
+      "",
+      "    def shutdown(self):",
+      "        return None",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  fs.writeFileSync(
+    devtoolPath,
+    [
+      "#!/bin/sh",
+      "PORT=\"\"",
+      "while [ \"$#\" -gt 0 ]; do",
+      "  if [ \"$1\" = \"--auto-port\" ]; then",
+      "    PORT=\"$2\"",
+      "    shift 2",
+      "  else",
+      "    shift",
+      "  fi",
+      "done",
+      "node -e \"const net=require('net'); const port=Number(process.argv[1]); const server=net.createServer(()=>{}); server.listen(port,'127.0.0.1',()=>{}); setTimeout(()=>server.close(()=>process.exit(0)), 15000);\" \"$PORT\" >/dev/null 2>&1 &",
+      "exit 0",
+      "",
+    ].join("\n"),
+    { encoding: "utf8", mode: 0o755 },
+  );
+
+  const plan: Plan = {
+    ...createBasePlan(artifactsDir),
+    metadata: {
+      name: "real-network-missing-callback-id",
+      draft: false,
+    },
+    environment: {
+      projectPath,
+      artifactsDir,
+      wechatDevtoolPath: devtoolPath,
+      testPort,
+      language: "en-US",
+      runtimeMode: "real",
+    },
+    steps: [
+      { id: "step-1", type: "session.start", input: { projectPath, initialPagePath: "/pages/bridge-lab/index" } },
+      {
+        id: "step-2",
+        type: "file.upload",
+        input: {
+          url: "https://service.invalid/upload",
+          filePath: "/tmp/bridge-demo.png",
+          name: "artifact",
+        },
+      },
+      {
+        id: "step-3",
+        type: "network.wait",
+        input: {
+          event: "request",
+          matcher: {
+            resourceType: "upload",
+            method: "POST",
+            url: "https://service.invalid/upload",
+          },
+          timeoutMs: 100,
+        },
+      },
+      {
+        id: "step-4",
+        type: "assert.networkResponse",
+        input: {
+          matcher: {
+            resourceType: "upload",
+            method: "POST",
+            url: "https://service.invalid/upload",
+            statusCode: 200,
+          },
+          count: 1,
+        },
+      },
+      { id: "step-5", type: "session.close", input: {} },
+    ],
+  };
+
+  const execution = await executePlanWithPython(plan, {
+    env: {
+      ...process.env,
+      PYTHONPATH: process.env.PYTHONPATH
+        ? `${fakeModuleDir}${path.delimiter}${process.env.PYTHONPATH}`
+        : fakeModuleDir,
+    },
+  });
+
+  assert.equal(execution.response.ok, true);
+  const result = execution.response.result as Record<string, unknown>;
+  const summary = result.summary as Record<string, unknown>;
+  const stepResults = result.stepResults as Array<Record<string, unknown>>;
+
+  assert.equal(summary.status, "passed");
+  assert.equal(
+    (stepResults[2]?.output as Record<string, unknown>).matched_count,
+    1,
+  );
+  assert.equal(
+    (stepResults[3]?.output as Record<string, unknown>).matched_count,
+    1,
   );
 });
 

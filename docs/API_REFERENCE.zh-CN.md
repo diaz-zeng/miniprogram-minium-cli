@@ -440,13 +440,22 @@ draft plan 作为数据是合法的，但 `exec` 只接受 `metadata.draft = fal
 - `element.click`
 - `element.input`
 - `wait.for`
+- `network.listen.start`
+- `network.listen.stop`
+- `network.listen.clear`
+- `network.wait`
 - `assert.pagePath`
 - `assert.elementText`
 - `assert.elementVisible`
+- `assert.networkRequest`
+- `assert.networkResponse`
 - `gesture.touchStart`
 - `gesture.touchMove`
 - `gesture.touchTap`
 - `gesture.touchEnd`
+- `network.intercept.add`
+- `network.intercept.remove`
+- `network.intercept.clear`
 - `storage.set`
 - `storage.get`
 - `storage.info`
@@ -620,6 +629,140 @@ bridge 类步骤可以额外携带以下公共可选字段：
 必填 input：
 
 - `locator`: object
+
+### 网络 matcher 结构
+
+网络监听、等待、断言和拦截步骤共用一个 `matcher` 对象。
+
+支持的 matcher 字段：
+
+- `url`: string
+- `urlPattern`: string
+- `method`: string
+- `resourceType`: `request` | `upload` | `download`
+- `query`: object
+- `headers`: object
+- `body`: 任意 JSON 可序列化值
+- `statusCode`: number
+- `responseHeaders`: object
+- `responseBody`: 任意 JSON 可序列化值
+
+### `network.listen.start`
+
+为当前活动会话启动一个有作用域的网络监听器。
+
+可选 input：
+
+- `listenerId`: string
+- `matcher`: object
+- `captureResponses`: boolean
+- `maxEvents`: number
+
+### `network.listen.stop`
+
+停止一个已注册的网络监听器。
+
+必填 input：
+
+- `listenerId`: string
+
+### `network.listen.clear`
+
+清空一个监听器或当前会话内全部监听器缓冲的网络事件。
+
+可选 input：
+
+- `listenerId`: string
+
+### `network.wait`
+
+等待一个匹配的请求或响应出现。
+
+必填 input：
+
+- `listenerId`: string，或者
+- `matcher`: object
+
+可选 input：
+
+- `event`: `request` | `response`
+- `timeoutMs`: number
+
+### `assert.networkRequest`
+
+对请求侧的网络证据做断言。
+
+可选 input：
+
+- `listenerId`: string
+- `matcher`: object
+- `count`: number
+- `minCount`: number
+- `maxCount`: number
+- `withinMs`: number
+- `orderedAfter`: string
+- `orderedBefore`: string
+
+校验说明：
+
+- 不提供 matcher 字段时，语义是“断言发生过任意请求”
+- `count` 不能和 `minCount` 或 `maxCount` 同时使用
+
+### `assert.networkResponse`
+
+对响应侧的网络证据做断言。
+
+可选 input：
+
+- `listenerId`: string
+- `matcher`: object
+- `count`: number
+- `minCount`: number
+- `maxCount`: number
+- `withinMs`: number
+- `orderedAfter`: string
+- `orderedBefore`: string
+
+校验说明：
+
+- 响应断言复用同一个 matcher 结构
+- `count` 不能和 `minCount` 或 `maxCount` 同时使用
+
+### `network.intercept.add`
+
+为匹配请求注册一个结构化拦截规则。
+
+必填 input：
+
+- `matcher`: object
+- `behavior`: object
+
+可选 input：
+
+- `ruleId`: string
+
+支持的 behavior 形式：
+
+- `{ "action": "continue" }`
+- `{ "action": "fail", "errorMessage": "forced failure", "errorCode": "NETWORK_MOCK" }`
+- `{ "action": "delay", "delayMs": 500 }`
+- `{ "action": "mock", "response": { "statusCode": 200, "headers": { "content-type": "application/json" }, "body": { "ok": true } } }`
+
+### `network.intercept.remove`
+
+移除一个已注册的拦截规则。
+
+必填 input：
+
+- `ruleId`: string
+
+### `network.intercept.clear`
+
+清空当前活动会话中的全部拦截规则。
+
+必填 input：
+
+- 无
 
 ### 手势步骤
 
@@ -856,6 +999,10 @@ CLI 会在以下情况下拒绝执行：
 - `environment.autoScreenshot` 不是 `off`、`on-success` 或 `always`
 - 可执行 plan 的 `steps` 缺失或为空
 - 存在不支持的 step type
+- 网络 matcher 使用了不受支持的字段，或输入形状非法
+- `network.wait` 同时缺少 `listenerId` 和 `matcher`
+- `assert.networkRequest` 或 `assert.networkResponse` 同时使用了 `count` 与 `minCount` / `maxCount`
+- `network.intercept.add` 缺少 `matcher`，或 `behavior` 结构不合法
 - 某个 step 缺少 `locator`、`pointerId`、`expectedPath`、`expectedText`、`key`、`url` 或 `tmplIds` 等必填字段
 - bridge 步骤使用了不支持的参数形状
 - plan 在 `exec` 时仍被标记为 draft

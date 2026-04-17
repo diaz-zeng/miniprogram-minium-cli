@@ -22,8 +22,8 @@ npx skills add diaz-zeng/miniprogram-minium-cli --skill miniprogram-minium-cli
 # execute a plan file
 miniprogram-minium-cli exec --plan ./path/to/plan.json
 
-# execute an inline plan and print structured output
-miniprogram-minium-cli exec --plan-json '{"version":1,"kind":"miniapp-test-plan", ... }' --json
+# execute an inline plan
+miniprogram-minium-cli exec --plan-json '{"version":1,"kind":"miniapp-test-plan", ... }'
 ```
 
 ## Bridge-backed API usage
@@ -35,6 +35,12 @@ Use bridge-backed steps when:
 - the capability should not depend on clicking a visible page control
 - the plan needs direct access to miniapp runtime state or host APIs
 - the user wants a structured result object under the step output
+
+Use network steps when:
+
+- the task is to verify whether a UI action or bridge step emitted any request
+- the plan needs URL, method, query, header, body, status, or response-body based filtering
+- the task needs a structured failure, delay, or mocked response instead of a real backend dependency
 
 Read [references/bridge-actions.md](references/bridge-actions.md) before drafting or editing plans that use:
 
@@ -51,12 +57,24 @@ Read [references/bridge-actions.md](references/bridge-actions.md) before draftin
 - `auth.*`
 - `subscription.requestMessage`
 
+Read [references/plan-authoring.md](references/plan-authoring.md) before drafting or editing plans that use:
+
+- `network.listen.*`
+- `network.wait`
+- `network.intercept.*`
+- `assert.networkRequest`
+- `assert.networkResponse`
+
 ## Guardrails
 
 - Treat `miniprogram-minium-cli` as an execution layer, not a planner.
 - Use documented commands, flags, plan fields, and artifact names only.
 - Do not invent unsupported step types or arbitrary shell workflows.
 - Prefer structured run artifacts over ad hoc log interpretation.
+- Do not add `--json` by default when `exec` already persists the evidence you need to run artifacts on disk.
+- Use `exec ... --json` only when the current caller must consume structured stdout directly in the same command context.
+- Do not read persisted run artifacts by default when the CLI result already answers the validation question.
+- Read `summary.json`, `result.json`, `comparison.json`, `network.json`, or screenshots only when the observed result is unexpected or when the caller explicitly needs deeper evidence.
 
 ## Workflow
 
@@ -70,6 +88,27 @@ Read [references/bridge-actions.md](references/bridge-actions.md) before draftin
    - Run analysis: [references/run-analysis.md](references/run-analysis.md)
 3. Keep the workflow inside the documented CLI contract in `README.md` and `docs/API_REFERENCE.md`.
 4. When a command or field is undocumented, stop treating it as supported and fall back to the repository docs.
+5. For `exec`, decide whether stdout JSON is actually needed before adding `--json`:
+   - Prefer plain `exec` when the goal is to validate a run, and inspect `summary.json`, `result.json`, `comparison.json`, `network.json`, or screenshots only if the observed outcome is unexpected or the caller explicitly asks for evidence.
+   - Add `--json` only when the immediate caller explicitly needs the structured response on stdout for in-process parsing or direct inline return.
+6. For persisted run artifacts, read them lazily:
+   - If the CLI outcome already matches the expected result, stop there unless the caller explicitly asks for artifact-level details.
+   - If the CLI outcome is unexpected, start with the smallest useful artifact and expand only as needed.
+
+## When to use `--json`
+
+Use `exec ... --json` only when structured stdout is part of the contract of the current caller.
+
+- Required:
+  - another script, agent, or CI step must parse the execution result directly from stdout in the same invocation
+  - the current workflow needs fields such as `ok`, `summary.status`, `error.error_code`, `artifacts`, or `stepResults` immediately, without reading the run directory afterward
+- Recommended:
+  - you are testing or debugging the CLI's structured stdout contract itself
+  - you are composing `miniprogram-minium-cli` inside a machine-to-machine pipeline where stdout is the integration surface
+- Usually avoid:
+  - the task only needs to know whether the run passed or failed
+  - the observed result already matches the expected outcome
+  - the same facts can be read later from `summary.json`, `result.json`, `comparison.json`, `network.json`, or screenshots with lower token cost
 
 ## Commands at a glance
 

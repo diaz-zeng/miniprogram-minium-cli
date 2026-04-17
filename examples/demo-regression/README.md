@@ -45,3 +45,6 @@ If you want screenshots to be collected automatically during regression runs, ad
 - `09-bridge-high-priority.exact.plan.json`: high-priority bridge actions for storage, navigation, app context, settings, clipboard, and feedback UI
 - `10-bridge-medium.placeholder.plan.json`: placeholder-safe medium-priority bridge actions for location open, media, file, device, and auth flows
 - `11-bridge-tourist-skip.exact.plan.json`: AppID-restricted bridge actions that should be skipped automatically while the demo project uses `touristappid`
+- `12-network-observation.placeholder.plan.json`: network listening, filtered waits, and ordered request assertions
+- `13-network-failure.placeholder.plan.json`: forced request failure with structured response assertions
+- `14-network-transfer.placeholder.plan.json`: upload and download observation with mocked download responses

@@ -246,3 +246,63 @@ test("main executes an inline json plan", async () => {
   assert.equal(parsed.ok, true);
   assert.equal(parsed.result.summary.status, "passed");
 });
+
+test("main prints a network summary in text mode when network artifacts exist", async () => {
+  const planJson = JSON.stringify({
+    version: 1,
+    kind: "miniapp-test-plan",
+    metadata: { draft: false, name: "inline-network-summary" },
+    execution: { mode: "serial", failFast: true },
+    environment: {
+      projectPath: "./examples",
+      artifactsDir: null,
+      wechatDevtoolPath: null,
+      testPort: 9420,
+      language: "en-US",
+      runtimeMode: "placeholder",
+      autoScreenshot: "off",
+    },
+    steps: [
+      {
+        id: "step-1",
+        type: "session.start",
+        input: {
+          projectPath: "./examples",
+        },
+      },
+      {
+        id: "step-2",
+        type: "network.listen.start",
+        input: {
+          listenerId: "network-all",
+          captureResponses: true,
+        },
+      },
+      {
+        id: "step-3",
+        type: "element.click",
+        input: {
+          locator: {
+            type: "id",
+            value: "login-button",
+          },
+        },
+      },
+      {
+        id: "step-4",
+        type: "session.close",
+        input: {},
+      },
+    ],
+  });
+
+  let stdout = "";
+  const exitCode = await main(["exec", "--plan-json", planJson], {
+    stdout: { write(chunk: string) { stdout += chunk; } },
+    stderr: { write() {} },
+  });
+
+  assert.equal(exitCode, 0);
+  assert.match(stdout, /Network: 2 events across 1 sessions/);
+  assert.match(stdout, /Network log:/);
+});

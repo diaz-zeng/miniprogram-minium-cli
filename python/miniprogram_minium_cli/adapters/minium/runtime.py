@@ -11,9 +11,11 @@ import socket
 import subprocess
 import time
 from typing import Any, Literal
+from urllib.parse import parse_qsl, urlsplit
 
 from ...domain.action_models import GestureTarget, Locator, WaitCondition
 from ...domain.errors import CliExecutionError, ErrorCode
+from ...domain.network_models import NetworkEvent, NetworkInterceptRuleState, NetworkListenerState, NetworkState
 from ...support.config import CliRuntimeConfig
 from ...support.i18n import t
 
@@ -99,6 +101,7 @@ class MiniumRuntimeAdapter:
     def stop_session(self, session_metadata: dict[str, Any]) -> None:
         """关闭一个底层会话。"""
         driver = session_metadata.get("runtime_driver")
+        self._cleanup_network_runtime(session_metadata)
         if driver is None:
             return
         try:
@@ -261,6 +264,11 @@ class MiniumRuntimeAdapter:
                 next_page_path=transition[0],
                 mode=transition[1],
             )
+        self._emit_placeholder_click_network_event(
+            session_metadata,
+            current_page_path=next_page_path,
+            element_id=str(match.get("id") or ""),
+        )
         return {"current_page_path": next_page_path}
 
     def input_text(
@@ -356,6 +364,117 @@ class MiniumRuntimeAdapter:
                 "timeout_ms": condition.timeout_ms,
             },
         )
+
+    def start_network_listener(
+        self,
+        session_metadata: dict[str, Any],
+        network_state: NetworkState,
+        listener: NetworkListenerState,
+    ) -> None:
+        """Register a network listener in the active runtime."""
+        self._ensure_network_runtime_supported(session_metadata)
+        self._ensure_real_network_controls(session_metadata, network_state)
+
+    def ensure_network_observation(
+        self,
+        session_metadata: dict[str, Any],
+        network_state: NetworkState,
+    ) -> None:
+        """Ensure real-runtime network hooks are ready when supported."""
+        driver = session_metadata.get("runtime_driver")
+        if driver is None:
+            return
+        app = session_metadata.get("runtime_app")
+        if app is None:
+            app = getattr(driver, "app", None)
+            session_metadata["runtime_app"] = app
+        if app is None:
+            return
+        if not callable(getattr(app, "hook_wx_method", None)) or not callable(
+            getattr(app, "release_hook_wx_method", None)
+        ):
+            return
+        self._ensure_real_network_controls(session_metadata, network_state)
+
+    def stop_network_listener(
+        self,
+        session_metadata: dict[str, Any],
+        network_state: NetworkState,
+        listener_id: str,
+    ) -> None:
+        """Stop a previously registered network listener."""
+        self._ensure_network_runtime_supported(session_metadata)
+
+    def clear_network_events(
+        self,
+        session_metadata: dict[str, Any],
+        network_state: NetworkState,
+        listener_id: str | None = None,
+    ) -> int:
+        """Clear buffered network events."""
+        self._ensure_network_runtime_supported(session_metadata)
+        if listener_id is None:
+            cleared_count = len(network_state.events)
+            network_state.events.clear()
+            for listener in network_state.listeners.values():
+                listener.matched_event_ids.clear()
+                listener.hit_count = 0
+            return cleared_count
+
+        listener = network_state.listeners.get(listener_id)
+        if listener is None:
+            return 0
+        cleared_ids = set(listener.matched_event_ids)
+        retained_events: list[NetworkEvent] = []
+        cleared_count = 0
+        for event in network_state.events:
+            if event.event_id not in cleared_ids:
+                retained_events.append(event)
+                continue
+            remaining_listener_ids = [
+                current_listener_id
+                for current_listener_id in event.listener_ids
+                if current_listener_id != listener_id
+            ]
+            if remaining_listener_ids:
+                event.listener_ids = remaining_listener_ids
+                retained_events.append(event)
+                continue
+            cleared_count += 1
+        network_state.events = retained_events
+        listener.matched_event_ids.clear()
+        listener.hit_count = 0
+        return cleared_count
+
+    def add_network_intercept_rule(
+        self,
+        session_metadata: dict[str, Any],
+        network_state: NetworkState,
+        rule: NetworkInterceptRuleState,
+    ) -> None:
+        """Register a network interception rule in the active runtime."""
+        self._ensure_network_runtime_supported(session_metadata)
+        self._ensure_real_network_controls(session_metadata, network_state)
+        self._sync_real_network_intercepts(session_metadata, network_state)
+
+    def remove_network_intercept_rule(
+        self,
+        session_metadata: dict[str, Any],
+        network_state: NetworkState,
+        rule_id: str,
+    ) -> None:
+        """Remove a previously registered network interception rule."""
+        self._ensure_network_runtime_supported(session_metadata)
+        self._sync_real_network_intercepts(session_metadata, network_state)
+
+    def clear_network_intercept_rules(
+        self,
+        session_metadata: dict[str, Any],
+        network_state: NetworkState,
+    ) -> None:
+        """Clear all interception rules in the active runtime."""
+        self._ensure_network_runtime_supported(session_metadata)
+        self._sync_real_network_intercepts(session_metadata, network_state)
 
     def execute_bridge_action(
         self,
@@ -600,14 +719,68 @@ class MiniumRuntimeAdapter:
             result = {"saved": True, "filePath": payload["filePath"]}
         elif step_type == "file.upload":
             result = {"statusCode": 200, "data": "{\"ok\":true}", "errMsg": "uploadFile:ok"}
+            self._emit_placeholder_network_request(
+                session_metadata,
+                request={
+                    "url": payload["url"],
+                    "method": "POST",
+                    "resourceType": "upload",
+                    "query": {},
+                    "headers": {},
+                    "body": {
+                        "filePath": payload["filePath"],
+                        "name": payload["name"],
+                    },
+                    "pagePath": page_path,
+                },
+                response={
+                    "statusCode": 200,
+                    "headers": {},
+                    "body": {"ok": True},
+                },
+            )
         elif step_type == "file.download":
             result = {"tempFilePath": "/tmp/mock-download.bin", "statusCode": 200}
+            self._emit_placeholder_network_request(
+                session_metadata,
+                request={
+                    "url": payload["url"],
+                    "method": "GET",
+                    "resourceType": "download",
+                    "query": {},
+                    "headers": {},
+                    "body": None,
+                    "pagePath": page_path,
+                },
+                response={
+                    "statusCode": 200,
+                    "headers": {},
+                    "body": {"tempFilePath": "/tmp/mock-download.bin"},
+                },
+            )
         elif step_type == "device.scanCode":
             result = {"result": "MINIUM-DEMO-CODE", "scanType": "QR_CODE"}
         elif step_type == "device.makePhoneCall":
             result = {"called": True, "phoneNumber": payload["phoneNumber"]}
         elif step_type == "auth.login":
             result = {"code": "mock-login-code"}
+            self._emit_placeholder_network_request(
+                session_metadata,
+                request={
+                    "url": "/api/login",
+                    "method": "POST",
+                    "resourceType": "request",
+                    "query": {},
+                    "headers": {},
+                    "body": {"source": "auth.login"},
+                    "pagePath": page_path,
+                },
+                response={
+                    "statusCode": 200,
+                    "headers": {},
+                    "body": {"code": "mock-login-code"},
+                },
+            )
         elif step_type == "auth.checkSession":
             result = {"valid": True}
         elif step_type == "subscription.requestMessage":
@@ -888,6 +1061,684 @@ class MiniumRuntimeAdapter:
         }
         session_metadata["bridge_state"] = bridge_state
         return bridge_state
+
+    def _ensure_network_runtime_supported(self, session_metadata: dict[str, Any]) -> None:
+        driver = session_metadata.get("runtime_driver")
+        if driver is None:
+            return
+        app = session_metadata.get("runtime_app")
+        if app is None and driver is not None:
+            app = getattr(driver, "app", None)
+            session_metadata["runtime_app"] = app
+        if app is None or not callable(getattr(app, "hook_wx_method", None)) or not callable(
+            getattr(app, "release_hook_wx_method", None)
+        ):
+            raise CliExecutionError(
+                error_code=ErrorCode.ENVIRONMENT_ERROR,
+                message=t("error.network_runtime_unavailable"),
+            )
+
+    def _ensure_real_network_controls(
+        self,
+        session_metadata: dict[str, Any],
+        network_state: NetworkState,
+    ) -> dict[str, Any]:
+        driver = session_metadata.get("runtime_driver")
+        if driver is None:
+            return {}
+        runtime_state = session_metadata.setdefault(
+            "network_runtime_state",
+            {
+                "initialized": False,
+                "hook_ids": {},
+                "pending_requests": {},
+                "pending_request_keys": {},
+                "mocked_interfaces": [],
+            },
+        )
+        if runtime_state.get("initialized"):
+            return runtime_state
+
+        app = session_metadata.get("runtime_app")
+        if app is None:
+            app = getattr(driver, "app", None)
+            session_metadata["runtime_app"] = app
+        if app is None:
+            raise CliExecutionError(
+                error_code=ErrorCode.ENVIRONMENT_ERROR,
+                message=t("error.network_runtime_unavailable"),
+            )
+
+        class _HookCallbackAdapter:
+            def __init__(self, callback):
+                self._callback = callback
+
+            def __call__(self, args):
+                if isinstance(args, (list, tuple)):
+                    return self._callback(*args)
+                return self._callback(args)
+
+        hook_ids: dict[str, int] = {}
+        for interface_name in ("request", "uploadFile", "downloadFile"):
+            before = _HookCallbackAdapter(
+                lambda options, call_id=None, *_args, interface_name=interface_name: self._handle_real_network_before(
+                    session_metadata,
+                    network_state,
+                    interface_name=interface_name,
+                    options=options,
+                    call_id=call_id,
+                )
+            )
+            callback = _HookCallbackAdapter(
+                lambda result, call_id=None, *_args, interface_name=interface_name: self._handle_real_network_callback(
+                    session_metadata,
+                    network_state,
+                    interface_name=interface_name,
+                    result=result,
+                    call_id=call_id,
+                )
+            )
+            hook_ids[interface_name] = app.hook_wx_method(
+                interface_name,
+                before=before,
+                callback=callback,
+                with_id=True,
+            )
+
+        runtime_state["initialized"] = True
+        runtime_state["hook_ids"] = hook_ids
+        return runtime_state
+
+    def _handle_real_network_before(
+        self,
+        session_metadata: dict[str, Any],
+        network_state: NetworkState,
+        *,
+        interface_name: str,
+        options: Any,
+        call_id: Any,
+    ) -> None:
+        normalized_options = options if isinstance(options, dict) else {}
+        request = self._normalize_real_network_request(
+            session_metadata,
+            interface_name=interface_name,
+            options=normalized_options,
+            call_id=call_id,
+        )
+        rule = self._match_network_intercept_rule(network_state, request)
+        outcome = "continue"
+        if rule is not None:
+            rule.hit_count += 1
+            outcome = rule.behavior.action
+            if outcome == "delay":
+                time.sleep(max((rule.behavior.delay_ms or 0) / 1000, 0))
+
+        pending_requests = self._ensure_real_network_controls(session_metadata, network_state).setdefault(
+            "pending_requests",
+            {},
+        )
+        pending_request_keys = self._ensure_real_network_controls(session_metadata, network_state).setdefault(
+            "pending_request_keys",
+            {},
+        )
+        pending_key = self._build_real_network_pending_key(network_state, request, call_id)
+        pending_requests[pending_key] = {
+            "request": dict(request),
+            "interface_name": interface_name,
+            "intercept_rule_id": rule.rule_id if rule is not None else None,
+            "outcome": outcome,
+        }
+        pending_request_keys.setdefault(interface_name, []).append(pending_key)
+
+        listener_ids = self._matching_network_listener_ids(
+            network_state,
+            request=request,
+            response=None,
+            event_type="request",
+        )
+        network_state.add_event(
+            request=request,
+            response=None,
+            listener_ids=listener_ids,
+            intercept_rule_id=rule.rule_id if rule is not None else None,
+            outcome=outcome,
+        )
+
+    def _handle_real_network_callback(
+        self,
+        session_metadata: dict[str, Any],
+        network_state: NetworkState,
+        *,
+        interface_name: str,
+        result: Any,
+        call_id: Any,
+    ) -> None:
+        runtime_state = session_metadata.get("network_runtime_state")
+        if not isinstance(runtime_state, dict):
+            return
+        pending_requests = runtime_state.get("pending_requests")
+        if not isinstance(pending_requests, dict):
+            return
+        pending_request_keys = runtime_state.get("pending_request_keys")
+        if not isinstance(pending_request_keys, dict):
+            pending_request_keys = {}
+            runtime_state["pending_request_keys"] = pending_request_keys
+        pending_key = str(call_id) if call_id is not None else self._pop_real_network_pending_key(
+            pending_request_keys,
+            interface_name,
+        )
+        if pending_key is None:
+            return
+        if call_id is not None:
+            self._remove_real_network_pending_key(pending_request_keys, interface_name, pending_key)
+        pending = pending_requests.pop(pending_key, None)
+        if not isinstance(pending, dict):
+            return
+
+        request = pending.get("request")
+        if not isinstance(request, dict):
+            return
+        response = self._normalize_real_network_response(interface_name=interface_name, result=result)
+        listener_ids = self._matching_network_listener_ids(
+            network_state,
+            request=request,
+            response=response,
+            event_type="response",
+        )
+        network_state.add_event(
+            request=dict(request),
+            response=response,
+            listener_ids=listener_ids,
+            intercept_rule_id=pending.get("intercept_rule_id"),
+            outcome=str(pending.get("outcome") or "continue"),
+        )
+
+    @staticmethod
+    def _build_real_network_pending_key(
+        network_state: NetworkState,
+        request: dict[str, Any],
+        call_id: Any,
+    ) -> str:
+        request_id = request.get("requestId")
+        if request_id is None or str(request_id).strip() == "":
+            request_id = network_state.allocate_request_id()
+            request["requestId"] = request_id
+        return str(call_id) if call_id is not None else str(request_id)
+
+    @staticmethod
+    def _pop_real_network_pending_key(
+        pending_request_keys: dict[str, Any],
+        interface_name: str,
+    ) -> str | None:
+        interface_keys = pending_request_keys.get(interface_name)
+        if not isinstance(interface_keys, list) or len(interface_keys) == 0:
+            return None
+        key = interface_keys.pop(0)
+        if len(interface_keys) == 0:
+            pending_request_keys.pop(interface_name, None)
+        return str(key)
+
+    @staticmethod
+    def _remove_real_network_pending_key(
+        pending_request_keys: dict[str, Any],
+        interface_name: str,
+        pending_key: str,
+    ) -> None:
+        interface_keys = pending_request_keys.get(interface_name)
+        if not isinstance(interface_keys, list):
+            return
+        pending_request_keys[interface_name] = [key for key in interface_keys if str(key) != pending_key]
+        if len(pending_request_keys[interface_name]) == 0:
+            pending_request_keys.pop(interface_name, None)
+
+    def _sync_real_network_intercepts(
+        self,
+        session_metadata: dict[str, Any],
+        network_state: NetworkState,
+    ) -> None:
+        driver = session_metadata.get("runtime_driver")
+        if driver is None:
+            return
+        runtime_state = self._ensure_real_network_controls(session_metadata, network_state)
+        app = session_metadata.get("runtime_app") or getattr(driver, "app", None)
+        if app is None:
+            raise CliExecutionError(
+                error_code=ErrorCode.ENVIRONMENT_ERROR,
+                message=t("error.network_runtime_unavailable"),
+            )
+        if not callable(getattr(app, "_mock_network", None)) or not callable(getattr(app, "_restore_network", None)):
+            needs_mocking = any(
+                rule.behavior.action in {"mock", "fail"}
+                for rule in network_state.intercept_rules.values()
+            )
+            if needs_mocking:
+                raise CliExecutionError(
+                    error_code=ErrorCode.ENVIRONMENT_ERROR,
+                    message=t("error.network_runtime_unavailable"),
+                )
+            return
+
+        mocked_interfaces = runtime_state.setdefault("mocked_interfaces", [])
+        for interface_name in tuple(dict.fromkeys(mocked_interfaces)):
+            app._restore_network(interface_name)
+        mocked_interfaces.clear()
+
+        interface_map = {
+            "request": "request",
+            "uploadFile": "upload",
+            "downloadFile": "download",
+        }
+        for interface_name, resource_type in interface_map.items():
+            for rule in network_state.intercept_rules.values():
+                if rule.behavior.action not in {"mock", "fail"}:
+                    continue
+                if not self._matcher_supports_resource_type(rule.matcher, resource_type):
+                    continue
+                mock_rule = self._build_real_network_mock_rule(rule, resource_type=resource_type)
+                if mock_rule is None:
+                    continue
+                if rule.behavior.action == "mock":
+                    app._mock_network(interface_name, mock_rule, success=self._build_real_mock_success(rule, interface_name))
+                else:
+                    app._mock_network(interface_name, mock_rule, fail=self._build_real_mock_failure(rule, interface_name))
+                if interface_name not in mocked_interfaces:
+                    mocked_interfaces.append(interface_name)
+
+    def _cleanup_network_runtime(self, session_metadata: dict[str, Any]) -> None:
+        runtime_state = session_metadata.pop("network_runtime_state", None)
+        driver = session_metadata.get("runtime_driver")
+        if not isinstance(runtime_state, dict):
+            return
+        if driver is None:
+            return
+        app = session_metadata.get("runtime_app") or getattr(driver, "app", None)
+        if app is None:
+            return
+        for interface_name, hook_id in dict(runtime_state.get("hook_ids") or {}).items():
+            if callable(getattr(app, "release_hook_wx_method", None)):
+                try:
+                    app.release_hook_wx_method(interface_name, hook_id)
+                except Exception:
+                    pass
+        for interface_name in list(dict.fromkeys(runtime_state.get("mocked_interfaces") or [])):
+            if callable(getattr(app, "_restore_network", None)):
+                try:
+                    app._restore_network(interface_name)
+                except Exception:
+                    pass
+
+    def _normalize_real_network_request(
+        self,
+        session_metadata: dict[str, Any],
+        *,
+        interface_name: str,
+        options: dict[str, Any],
+        call_id: Any,
+    ) -> dict[str, Any]:
+        plain_options = self._to_plain_data(options)
+        if not isinstance(plain_options, dict):
+            plain_options = {}
+        raw_url = str(plain_options.get("url") or "")
+        split_result = urlsplit(raw_url)
+        normalized_url = split_result.path or raw_url
+        if split_result.scheme and split_result.netloc:
+            normalized_url = f"{split_result.scheme}://{split_result.netloc}{split_result.path or ''}"
+        query = {key: value for key, value in parse_qsl(split_result.query, keep_blank_values=True)}
+        headers = plain_options.get("header")
+        if not isinstance(headers, dict):
+            headers = plain_options.get("headers")
+        if not isinstance(headers, dict):
+            headers = {}
+
+        body: Any = None
+        method = "GET"
+        resource_type = "request"
+        if interface_name == "uploadFile":
+            method = str(plain_options.get("method") or "POST").upper()
+            resource_type = "upload"
+            body = self._compact_dict(
+                {
+                    "name": plain_options.get("name"),
+                    "formData": plain_options.get("formData"),
+                    "fileName": Path(str(plain_options.get("filePath") or "")).name or None,
+                }
+            )
+        elif interface_name == "downloadFile":
+            method = str(plain_options.get("method") or "GET").upper()
+            resource_type = "download"
+        else:
+            method = str(plain_options.get("method") or "GET").upper()
+            body = plain_options.get("data")
+            if method == "GET" and isinstance(body, dict):
+                query.update({str(key): value for key, value in body.items()})
+                body = None
+
+        return self._compact_dict(
+            {
+                "requestId": str(call_id) if call_id is not None else None,
+                "url": normalized_url,
+                "method": method,
+                "resourceType": resource_type,
+                "query": query,
+                "headers": headers,
+                "body": body,
+                "pagePath": self._get_real_runtime_page_path(session_metadata),
+            }
+        )
+
+    def _normalize_real_network_response(self, *, interface_name: str, result: Any) -> dict[str, Any]:
+        plain_result = self._to_plain_data(result)
+        if not isinstance(plain_result, dict):
+            plain_result = {"value": plain_result}
+        headers = plain_result.get("header")
+        if not isinstance(headers, dict):
+            headers = plain_result.get("headers")
+        if not isinstance(headers, dict):
+            headers = {}
+        status_code = plain_result.get("statusCode")
+        try:
+            normalized_status_code = int(status_code) if status_code is not None else 0
+        except (TypeError, ValueError):
+            normalized_status_code = 0
+
+        if interface_name == "downloadFile":
+            body = self._compact_dict(
+                {
+                    "tempFilePath": plain_result.get("tempFilePath"),
+                    "filePath": plain_result.get("filePath"),
+                    "profile": plain_result.get("profile"),
+                    "errMsg": plain_result.get("errMsg"),
+                }
+            )
+        elif interface_name == "uploadFile":
+            body = self._compact_dict(
+                {
+                    "data": plain_result.get("data"),
+                    "errMsg": plain_result.get("errMsg"),
+                }
+            )
+        else:
+            body = plain_result.get("data")
+            if body is None and plain_result.get("errMsg") is not None:
+                body = self._compact_dict(
+                    {
+                        "errMsg": plain_result.get("errMsg"),
+                        "errorCode": plain_result.get("errorCode"),
+                    }
+                )
+
+        return {
+            "statusCode": normalized_status_code,
+            "headers": headers,
+            "body": body,
+        }
+
+    def _build_real_network_mock_rule(
+        self,
+        rule: NetworkInterceptRuleState,
+        *,
+        resource_type: str,
+    ) -> dict[str, Any] | None:
+        matcher = rule.matcher
+        mock_rule: dict[str, Any] = {}
+        if matcher.url_pattern is not None:
+            mock_rule["url"] = matcher.url_pattern
+        elif matcher.url is not None:
+            mock_rule["url"] = matcher.url
+        if matcher.method is not None:
+            mock_rule["method"] = matcher.method
+        if matcher.query is not None:
+            mock_rule["params"] = matcher.query
+        if matcher.headers is not None:
+            mock_rule["header"] = matcher.headers
+        if matcher.body is not None:
+            if resource_type == "request":
+                mock_rule["data"] = matcher.body
+            elif resource_type == "upload" and isinstance(matcher.body, dict):
+                if "formData" in matcher.body:
+                    mock_rule["formData"] = matcher.body["formData"]
+                if "name" in matcher.body:
+                    mock_rule["name"] = matcher.body["name"]
+        return mock_rule
+
+    @staticmethod
+    def _build_real_mock_success(rule: NetworkInterceptRuleState, interface_name: str) -> dict[str, Any]:
+        response = dict(rule.behavior.response or {})
+        headers = response.get("headers")
+        if not isinstance(headers, dict):
+            headers = {}
+        body = response.get("body")
+        payload = {
+            "statusCode": int(response.get("statusCode", 200)),
+            "header": headers,
+        }
+        if interface_name == "downloadFile":
+            payload["tempFilePath"] = body.get("tempFilePath") if isinstance(body, dict) else "/tmp/mock-download.bin"
+        elif interface_name == "uploadFile":
+            payload["data"] = json.dumps(body, ensure_ascii=False) if isinstance(body, (dict, list)) else (body or "")
+        else:
+            payload["data"] = body
+        return payload
+
+    @staticmethod
+    def _build_real_mock_failure(rule: NetworkInterceptRuleState, interface_name: str) -> dict[str, Any]:
+        error_message = rule.behavior.error_message or f"{interface_name}:fail mocked by miniprogram-minium-cli"
+        payload = {
+            "errMsg": error_message,
+        }
+        if rule.behavior.error_code is not None:
+            payload["errorCode"] = rule.behavior.error_code
+        return payload
+
+    @staticmethod
+    def _matcher_supports_resource_type(matcher: Any, resource_type: str) -> bool:
+        matcher_resource_type = getattr(matcher, "resource_type", None)
+        return matcher_resource_type in (None, resource_type)
+
+    def _get_real_runtime_page_path(self, session_metadata: dict[str, Any]) -> str | None:
+        app = session_metadata.get("runtime_app")
+        if app is None:
+            driver = session_metadata.get("runtime_driver")
+            if driver is None:
+                return None
+            app = getattr(driver, "app", None)
+        if app is None or not callable(getattr(app, "get_current_page", None)):
+            return None
+        try:
+            page = app.get_current_page()
+        except Exception:
+            return None
+        return self._normalize_page_path(getattr(page, "path", None))
+
+    def _emit_placeholder_click_network_event(
+        self,
+        session_metadata: dict[str, Any],
+        *,
+        current_page_path: str,
+        element_id: str,
+    ) -> None:
+        if not element_id:
+            return
+        if element_id == "login-button":
+            self._emit_placeholder_network_request(
+                session_metadata,
+                request={
+                    "url": "/api/login",
+                    "method": "POST",
+                    "resourceType": "request",
+                    "query": {},
+                    "headers": {"content-type": "application/json"},
+                    "body": {"username": "demo-user"},
+                    "pagePath": current_page_path,
+                },
+                response={
+                    "statusCode": 200,
+                    "headers": {"content-type": "application/json"},
+                    "body": {"ok": True, "redirect": "pages/home/index"},
+                },
+            )
+            return
+        if element_id == "network-login-request-button":
+            self._emit_placeholder_network_request(
+                session_metadata,
+                request={
+                    "url": "https://service.invalid/api/login",
+                    "method": "POST",
+                    "resourceType": "request",
+                    "query": {},
+                    "headers": {"content-type": "application/json"},
+                    "body": {"username": "demo-user"},
+                    "pagePath": current_page_path,
+                },
+                response={
+                    "statusCode": 200,
+                    "headers": {"content-type": "application/json"},
+                    "body": {"ok": True, "source": "demo-home"},
+                },
+            )
+            return
+        if element_id == "network-reviews-request-button":
+            self._emit_placeholder_network_request(
+                session_metadata,
+                request={
+                    "url": "https://service.invalid/api/reviews",
+                    "method": "GET",
+                    "resourceType": "request",
+                    "query": {"tab": "main"},
+                    "headers": {},
+                    "body": None,
+                    "pagePath": current_page_path,
+                },
+                response={
+                    "statusCode": 200,
+                    "headers": {"content-type": "application/json"},
+                    "body": {"items": [{"id": "review-1", "score": 5}], "source": "demo-home"},
+                },
+            )
+            return
+        if element_id in {"home-to-review-board-button", "bridge-to-review-board-button"}:
+            self._emit_placeholder_network_request(
+                session_metadata,
+                request={
+                    "url": "/api/reviews",
+                    "method": "GET",
+                    "resourceType": "request",
+                    "query": {"tab": "main"},
+                    "headers": {},
+                    "body": None,
+                    "pagePath": current_page_path,
+                },
+                response={
+                    "statusCode": 200,
+                    "headers": {"content-type": "application/json"},
+                    "body": {"items": [{"id": "review-1", "score": 5}]},
+                },
+            )
+
+    def _emit_placeholder_network_request(
+        self,
+        session_metadata: dict[str, Any],
+        *,
+        request: dict[str, Any],
+        response: dict[str, Any] | None,
+    ) -> None:
+        network_state = session_metadata.get("network_state")
+        if not isinstance(network_state, NetworkState):
+            return
+        normalized_request = dict(request)
+        normalized_request["resourceType"] = normalized_request.get("resourceType") or "request"
+        rule = self._match_network_intercept_rule(network_state, normalized_request)
+        resolved_response = dict(response) if isinstance(response, dict) else None
+        outcome = "continue"
+        if rule is not None:
+            rule.hit_count += 1
+            outcome = rule.behavior.action
+            if outcome == "fail":
+                resolved_response = {
+                    "statusCode": 0,
+                    "headers": {},
+                    "body": {
+                        "errorMessage": rule.behavior.error_message or "forced failure",
+                        "errorCode": rule.behavior.error_code or "NETWORK_MOCK",
+                    },
+                }
+            elif outcome == "delay":
+                time.sleep(max((rule.behavior.delay_ms or 0) / 1000, 0))
+            elif outcome == "mock":
+                resolved_response = dict(rule.behavior.response or {})
+
+        request_listener_ids = self._matching_network_listener_ids(
+            network_state,
+            request=normalized_request,
+            response=None,
+            event_type="request",
+        )
+        network_state.add_event(
+            request=normalized_request,
+            response=None,
+            listener_ids=request_listener_ids,
+            intercept_rule_id=rule.rule_id if rule is not None else None,
+            outcome=outcome,
+        )
+        if resolved_response is not None:
+            response_listener_ids = self._matching_network_listener_ids(
+                network_state,
+                request=normalized_request,
+                response=resolved_response,
+                event_type="response",
+            )
+            network_state.add_event(
+                request=normalized_request,
+                response=resolved_response,
+                listener_ids=response_listener_ids,
+                intercept_rule_id=rule.rule_id if rule is not None else None,
+                outcome=outcome,
+            )
+
+    def _matching_network_listener_ids(
+        self,
+        network_state: NetworkState,
+        *,
+        request: dict[str, Any],
+        response: dict[str, Any] | None,
+        event_type: str,
+    ) -> list[str]:
+        temp_event = NetworkEvent(
+            event_id="preview",
+            request_id=str(request.get("requestId") or "preview-request"),
+            event_type=event_type,
+            sequence=0,
+            timestamp_ms=int(time.time() * 1000),
+            request=request,
+            response=response,
+        )
+        matched_listener_ids: list[str] = []
+        for listener_id, listener in network_state.listeners.items():
+            if event_type == "response" and not listener.capture_responses:
+                continue
+            if listener.matcher is not None and not listener.matcher.matches(temp_event, event_kind=event_type):
+                continue
+            matched_listener_ids.append(listener_id)
+        return matched_listener_ids
+
+    @staticmethod
+    def _match_network_intercept_rule(
+        network_state: NetworkState,
+        request: dict[str, Any],
+    ) -> NetworkInterceptRuleState | None:
+        preview_event = NetworkEvent(
+            event_id="preview",
+            request_id=str(request.get("requestId") or "preview-request"),
+            event_type="request",
+            sequence=0,
+            timestamp_ms=int(time.time() * 1000),
+            request=request,
+            response=None,
+        )
+        for rule in network_state.intercept_rules.values():
+            if rule.matcher.matches(preview_event, event_kind="request"):
+                return rule
+        return None
 
     @staticmethod
     def _compact_dict(payload: dict[str, Any]) -> dict[str, Any]:
@@ -1986,6 +2837,36 @@ class MiniumRuntimeAdapter:
                     "center_y": 240,
                     "selector": "#home-to-bridge-lab-button",
                 },
+                {
+                    "id": "home-to-review-board-button",
+                    "text": "Open the review board",
+                    "visible": True,
+                    "enabled": True,
+                    "editable": False,
+                    "center_x": 180,
+                    "center_y": 320,
+                    "selector": "#home-to-review-board-button",
+                },
+                {
+                    "id": "network-login-request-button",
+                    "text": "Trigger login request",
+                    "visible": True,
+                    "enabled": True,
+                    "editable": False,
+                    "center_x": 180,
+                    "center_y": 400,
+                    "selector": "#network-login-request-button",
+                },
+                {
+                    "id": "network-reviews-request-button",
+                    "text": "Trigger reviews request",
+                    "visible": True,
+                    "enabled": True,
+                    "editable": False,
+                    "center_x": 180,
+                    "center_y": 480,
+                    "selector": "#network-reviews-request-button",
+                },
             ]
         if page_path == "pages/bridge-lab/index":
             return [
@@ -2038,6 +2919,16 @@ class MiniumRuntimeAdapter:
                     "center_x": 180,
                     "center_y": 484,
                     "selector": "#bridge-to-home-button",
+                },
+                {
+                    "id": "bridge-to-review-board-button",
+                    "text": "Open the review board",
+                    "visible": True,
+                    "enabled": True,
+                    "editable": False,
+                    "center_x": 180,
+                    "center_y": 544,
+                    "selector": "#bridge-to-review-board-button",
                 },
             ]
         return [

@@ -30,6 +30,8 @@ type MessageKey =
   | "cli.summary"
   | "cli.result"
   | "cli.comparison"
+  | "cli.networkSummary"
+  | "cli.networkArtifact"
   | "cli.failure"
   | "cli.noBundledSkills";
 
@@ -64,6 +66,8 @@ const messages: Record<CliLanguage, Record<MessageKey, string>> = {
     "cli.summary": "Summary: {path}",
     "cli.result": "Result: {path}",
     "cli.comparison": "Comparison: {path}",
+    "cli.networkSummary": "Network: {events} events across {sessions} sessions",
+    "cli.networkArtifact": "Network log: {path}",
     "cli.failure": "Failure: {code} - {message}",
     "cli.noBundledSkills": "No bundled skills are available in this package.",
   },
@@ -97,6 +101,8 @@ const messages: Record<CliLanguage, Record<MessageKey, string>> = {
     "cli.summary": "摘要文件：{path}",
     "cli.result": "结果文件：{path}",
     "cli.comparison": "对比文件：{path}",
+    "cli.networkSummary": "网络摘要：{events} 个事件，覆盖 {sessions} 个会话",
+    "cli.networkArtifact": "网络日志：{path}",
     "cli.failure": "失败：{code} - {message}",
     "cli.noBundledSkills": "当前包中没有可安装的随包 skill。",
   },

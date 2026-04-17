@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+from .network_models import NetworkState
+
 
 def utcnow() -> datetime:
     """返回当前 UTC 时间。"""
@@ -44,6 +46,7 @@ class AcceptanceSession:
     latest_failure_summary: str | None = None
     active_pointers: dict[int, ActivePointer] = field(default_factory=dict)
     latest_gesture_event: dict[str, Any] | None = None
+    network_state: NetworkState = field(default_factory=NetworkState)
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def touch(self) -> None:

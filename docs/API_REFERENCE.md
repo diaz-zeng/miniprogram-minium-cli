@@ -440,13 +440,22 @@ The CLI currently supports these step types:
 - `element.click`
 - `element.input`
 - `wait.for`
+- `network.listen.start`
+- `network.listen.stop`
+- `network.listen.clear`
+- `network.wait`
 - `assert.pagePath`
 - `assert.elementText`
 - `assert.elementVisible`
+- `assert.networkRequest`
+- `assert.networkResponse`
 - `gesture.touchStart`
 - `gesture.touchMove`
 - `gesture.touchTap`
 - `gesture.touchEnd`
+- `network.intercept.add`
+- `network.intercept.remove`
+- `network.intercept.clear`
 - `storage.set`
 - `storage.get`
 - `storage.info`
@@ -620,6 +629,140 @@ Asserts that an element is visible.
 Required input:
 
 - `locator`: object
+
+### Network Matcher Shape
+
+Network observation, waiting, assertion, and interception steps reuse a shared `matcher` object.
+
+Supported matcher fields:
+
+- `url`: string
+- `urlPattern`: string
+- `method`: string
+- `resourceType`: `request` | `upload` | `download`
+- `query`: object
+- `headers`: object
+- `body`: any JSON-serializable value
+- `statusCode`: number
+- `responseHeaders`: object
+- `responseBody`: any JSON-serializable value
+
+### `network.listen.start`
+
+Starts a scoped network listener for the active session.
+
+Optional input:
+
+- `listenerId`: string
+- `matcher`: object
+- `captureResponses`: boolean
+- `maxEvents`: number
+
+### `network.listen.stop`
+
+Stops a previously registered network listener.
+
+Required input:
+
+- `listenerId`: string
+
+### `network.listen.clear`
+
+Clears buffered network events for one listener or all listeners in the active session.
+
+Optional input:
+
+- `listenerId`: string
+
+### `network.wait`
+
+Waits for a matched request or response to appear.
+
+Required input:
+
+- `listenerId`: string, or
+- `matcher`: object
+
+Optional input:
+
+- `event`: `request` | `response`
+- `timeoutMs`: number
+
+### `assert.networkRequest`
+
+Asserts request-side network evidence.
+
+Optional input:
+
+- `listenerId`: string
+- `matcher`: object
+- `count`: number
+- `minCount`: number
+- `maxCount`: number
+- `withinMs`: number
+- `orderedAfter`: string
+- `orderedBefore`: string
+
+Validation notes:
+
+- omit matcher fields to assert "any request"
+- `count` cannot be combined with `minCount` or `maxCount`
+
+### `assert.networkResponse`
+
+Asserts response-side network evidence.
+
+Optional input:
+
+- `listenerId`: string
+- `matcher`: object
+- `count`: number
+- `minCount`: number
+- `maxCount`: number
+- `withinMs`: number
+- `orderedAfter`: string
+- `orderedBefore`: string
+
+Validation notes:
+
+- response assertions reuse the same matcher shape
+- `count` cannot be combined with `minCount` or `maxCount`
+
+### `network.intercept.add`
+
+Registers a structured interception rule for matched requests.
+
+Required input:
+
+- `matcher`: object
+- `behavior`: object
+
+Optional input:
+
+- `ruleId`: string
+
+Supported behavior shapes:
+
+- `{ "action": "continue" }`
+- `{ "action": "fail", "errorMessage": "forced failure", "errorCode": "NETWORK_MOCK" }`
+- `{ "action": "delay", "delayMs": 500 }`
+- `{ "action": "mock", "response": { "statusCode": 200, "headers": { "content-type": "application/json" }, "body": { "ok": true } } }`
+
+### `network.intercept.remove`
+
+Removes a previously registered interception rule.
+
+Required input:
+
+- `ruleId`: string
+
+### `network.intercept.clear`
+
+Clears all interception rules in the active session.
+
+Required input:
+
+- none
 
 ### Gesture Steps
 
@@ -856,6 +999,10 @@ The CLI rejects a plan when:
 - `environment.autoScreenshot` is not one of `off`, `on-success`, or `always`
 - `steps` is missing or empty for a runnable plan
 - a step type is not supported
+- a network matcher uses an unsupported field or invalid shape
+- `network.wait` omits both `listenerId` and `matcher`
+- `assert.networkRequest` or `assert.networkResponse` combines `count` with `minCount` or `maxCount`
+- `network.intercept.add` omits `matcher` or uses an invalid `behavior` shape
 - a step misses required fields such as `locator`, `pointerId`, `expectedPath`, `expectedText`, `key`, `url`, or `tmplIds`
 - a bridge-backed step uses unsupported parameter shapes
 - the plan is marked as draft during `exec`

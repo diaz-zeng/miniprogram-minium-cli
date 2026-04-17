@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "kind": "miniapp-test-plan",
+  "metadata": {
+    "name": "demo-network-failure-placeholder",
+    "draft": false
+  },
+  "environment": {
+    "projectPath": "../demo-miniapp",
+    "wechatDevtoolPath": null,
+    "testPort": 9420,
+    "language": "en-US",
+    "runtimeMode": "placeholder"
+  },
+  "execution": {
+    "mode": "serial",
+    "failFast": true
+  },
+  "steps": [
+    {
+      "id": "step-1",
+      "type": "session.start",
+      "input": {
+        "projectPath": "../demo-miniapp",
+        "initialPagePath": "/pages/home/index"
+      }
+    },
+    {
+      "id": "step-2",
+      "type": "network.listen.start",
+      "input": {
+        "listenerId": "home-network",
+        "captureResponses": true
+      }
+    },
+    {
+      "id": "step-3",
+      "type": "network.intercept.add",
+      "input": {
+        "ruleId": "reviews-fail",
+        "matcher": {
+          "url": "https://service.invalid/api/reviews",
+          "method": "GET"
+        },
+        "behavior": {
+          "action": "fail",
+          "errorMessage": "forced review failure",
+          "errorCode": "REVIEW_FAIL"
+        }
+      }
+    },
+    {
+      "id": "step-4",
+      "type": "element.click",
+      "input": {
+        "locator": {
+          "type": "id",
+          "value": "network-reviews-request-button"
+        }
+      }
+    },
+    {
+      "id": "step-5",
+      "type": "network.wait",
+      "input": {
+        "listenerId": "home-network",
+        "event": "response",
+        "timeoutMs": 1000,
+        "matcher": {
+          "url": "https://service.invalid/api/reviews",
+          "statusCode": 0
+        }
+      }
+    },
+    {
+      "id": "step-6",
+      "type": "assert.networkResponse",
+      "input": {
+        "listenerId": "home-network",
+        "matcher": {
+          "url": "https://service.invalid/api/reviews",
+          "statusCode": 0,
+          "responseBody": {
+            "errorCode": "REVIEW_FAIL"
+          }
+        },
+        "count": 1
+      }
+    },
+    {
+      "id": "step-7",
+      "type": "network.intercept.clear",
+      "input": {}
+    },
+    {
+      "id": "step-8",
+      "type": "session.close",
+      "input": {}
+    }
+  ]
+}

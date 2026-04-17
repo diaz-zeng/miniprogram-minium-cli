@@ -8,6 +8,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-04-17
+
+### Added
+
+- Structured network observation controls for miniapp execution, including `network.listen.start`, `network.listen.stop`, `network.listen.clear`, `network.wait`, `assert.networkRequest`, and `assert.networkResponse`.
+- Structured network interception controls through `network.intercept.add`, `network.intercept.remove`, and `network.intercept.clear` for mock, fail, and delay behaviors.
+- Network-focused demo regression plans under `examples/demo-regression/12-network-observation.placeholder.plan.json`, `13-network-failure.placeholder.plan.json`, and `14-network-transfer.placeholder.plan.json`.
+- OpenSpec change artifacts for network request controls under `openspec/changes/add-network-request-controls/`.
+
+### Changed
+
+- The placeholder runtime now records network request and response events for bridge-driven file and navigation flows so bundled plans can assert network behavior end to end.
+- The real Minium runtime now initializes network observation hooks for listener-based and matcher-only network waits/assertions, including runtimes that omit callback IDs.
+- Listener lifecycle handling now preserves shared observations when clearing one listener and prevents stale events from leaking into a later listener that reuses the same `listenerId`.
+- The product skill, API reference, README guidance, and bundled examples now document the new network observation and interception workflow.
+
 ## [1.2.2] - 2026-04-15
 
 ### Changed
