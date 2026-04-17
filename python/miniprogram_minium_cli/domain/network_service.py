@@ -83,6 +83,12 @@ class NetworkService:
 
     def wait_for_event(self, session_id: str, config: NetworkWaitConfig) -> dict[str, Any]:
         session = self._require_session(session_id)
+        self._ensure_matcher_observation_ready(
+            session.metadata,
+            session.network_state,
+            config.listener_id,
+            config.matcher,
+        )
         deadline = time.time() + max(config.timeout_ms / 1000, 0.001)
         while True:
             matched = self._select_events(session.network_state, listener_id=config.listener_id, matcher=config.matcher, event_type=config.event)
@@ -185,6 +191,12 @@ class NetworkService:
 
     def _assert_events(self, session_id: str, config: NetworkAssertConfig, *, event_type: str) -> dict[str, Any]:
         session = self._require_session(session_id)
+        self._ensure_matcher_observation_ready(
+            session.metadata,
+            session.network_state,
+            config.listener_id,
+            config.matcher,
+        )
         matched = self._select_events(session.network_state, listener_id=config.listener_id, matcher=config.matcher, event_type=event_type)
         self._validate_assertion(session.network_state, matched, config, event_type)
         self.repository.update(session)
@@ -266,3 +278,14 @@ class NetworkService:
                 details={"session_id": session_id},
             )
         return session
+
+    def _ensure_matcher_observation_ready(
+        self,
+        session_metadata: dict[str, Any],
+        network_state: NetworkState,
+        listener_id: str | None,
+        matcher: Any,
+    ) -> None:
+        if listener_id is not None or matcher is None:
+            return
+        self.runtime_adapter.ensure_network_observation(session_metadata, network_state)

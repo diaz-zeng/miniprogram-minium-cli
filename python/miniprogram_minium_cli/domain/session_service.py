@@ -54,6 +54,7 @@ class SessionService:
             }
         )
         session.metadata["network_state"] = session.network_state
+        self.runtime_adapter.ensure_network_observation(session.metadata, session.network_state)
         session.current_page_path = runtime_state["current_page_path"]
         self.repository.update(session)
 
