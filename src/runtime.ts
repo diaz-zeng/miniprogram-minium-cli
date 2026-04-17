@@ -68,6 +68,14 @@ type SpawnImplementation = (
   options?: SpawnSyncOptionsWithStringEncoding,
 ) => SpawnSyncReturns<string>;
 
+type DownloadImplementation = (url: string, targetPath: string) => Promise<void>;
+type ExtractArchiveImplementation = (
+  archivePath: string,
+  extractDir: string,
+  archiveExt: string,
+  options?: RuntimeOptions,
+) => void;
+
 export interface RuntimeOptions {
   env?: NodeJS.ProcessEnv;
   platform?: NodeJS.Platform;
@@ -75,7 +83,11 @@ export interface RuntimeOptions {
   homeDir?: string;
   cwd?: string;
   spawnImplementation?: SpawnImplementation;
+  downloadImplementation?: DownloadImplementation;
+  extractArchiveImplementation?: ExtractArchiveImplementation;
 }
+
+const managedUvInstallPromises = new Map<string, Promise<void>>();
 
 export class RuntimeLaunchError extends Error {
   readonly details: Record<string, unknown>;
@@ -227,7 +239,15 @@ export async function ensureUv(options: RuntimeOptions = {}): Promise<string> {
     return layout.managedUvBinary;
   }
 
-  await installManagedUvBinary(layout, options);
+  let installPromise = managedUvInstallPromises.get(layout.managedUvBinary);
+  if (!installPromise) {
+    installPromise = installManagedUvBinary(layout, options).finally(() => {
+      managedUvInstallPromises.delete(layout.managedUvBinary);
+    });
+    managedUvInstallPromises.set(layout.managedUvBinary, installPromise);
+  }
+
+  await installPromise;
   if (!fs.existsSync(layout.managedUvBinary)) {
     throw new RuntimeLaunchError("uv installation finished but no executable was found.", {
       target: layout.managedUvBinary,
@@ -245,26 +265,34 @@ async function installManagedUvBinary(layout: RuntimeLayout, options: RuntimeOpt
 
   try {
     fs.mkdirSync(extractDir, { recursive: true });
-    await downloadFile(installUrl, archivePath);
-    extractArchive(archivePath, extractDir, archiveExt, options);
+    await (options.downloadImplementation || downloadFile)(installUrl, archivePath);
+    (options.extractArchiveImplementation || extractArchive)(archivePath, extractDir, archiveExt, options);
     const extractedRoot = path.join(extractDir, `uv-${triple}`);
     const uvSource = path.join(extractedRoot, process.platform === "win32" ? "uv.exe" : "uv");
     const uvxSource = path.join(extractedRoot, process.platform === "win32" ? "uvx.exe" : "uvx");
 
-    await fsp.copyFile(uvSource, layout.managedUvBinary);
+    await installBinaryAtomically(uvSource, layout.managedUvBinary);
     if (fs.existsSync(uvxSource)) {
       const uvxTarget = path.join(layout.uvInstallDir, process.platform === "win32" ? "uvx.exe" : "uvx");
-      await fsp.copyFile(uvxSource, uvxTarget);
-      if (process.platform !== "win32") {
-        await fsp.chmod(uvxTarget, 0o755);
-      }
-    }
-
-    if (process.platform !== "win32") {
-      await fsp.chmod(layout.managedUvBinary, 0o755);
+      await installBinaryAtomically(uvxSource, uvxTarget);
     }
   } finally {
     await fsp.rm(tmpDir, { recursive: true, force: true });
+  }
+}
+
+async function installBinaryAtomically(sourcePath: string, targetPath: string): Promise<void> {
+  const stagedTarget = `${targetPath}.${process.pid}.${Date.now()}.tmp`;
+
+  try {
+    await fsp.copyFile(sourcePath, stagedTarget);
+    if (process.platform !== "win32") {
+      await fsp.chmod(stagedTarget, 0o755);
+    }
+    await fsp.rename(stagedTarget, targetPath);
+  } catch (error) {
+    await fsp.rm(stagedTarget, { force: true }).catch(() => undefined);
+    throw error;
   }
 }
 

@@ -10,6 +10,7 @@ import {
   buildUvRunArgs,
   DEFAULT_PYTHON_REQUEST,
   ensureManagedRuntimeLayout,
+  ensureUv,
   getCacheBaseDir,
   getManagedRuntimeLayout,
   getRequestedPythonVersion,
@@ -180,4 +181,41 @@ test("buildUvRunArgs builds a managed-python command", () => {
     "-m",
     "miniprogram_minium_cli",
   ]);
+});
+
+test("ensureUv deduplicates concurrent managed uv installs", async () => {
+  const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), "minium-cli-uv-cache-"));
+  const downloadCalls: string[] = [];
+  const env = {
+    MINIPROGRAM_MINIUM_CLI_CACHE_DIR: cacheDir,
+  };
+
+  try {
+    const options = {
+      env,
+      platform: "linux" as const,
+      arch: "x64" as const,
+      downloadImplementation: async (url: string, targetPath: string) => {
+        downloadCalls.push(url);
+        await fs.promises.writeFile(targetPath, "fake-archive", "utf8");
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      },
+      extractArchiveImplementation: (archivePath: string, extractDir: string) => {
+        void archivePath;
+        const extractedRoot = path.join(extractDir, "uv-x86_64-unknown-linux-gnu");
+        fs.mkdirSync(extractedRoot, { recursive: true });
+        fs.writeFileSync(path.join(extractedRoot, "uv"), "#!/bin/sh\nexit 0\n", "utf8");
+        fs.writeFileSync(path.join(extractedRoot, "uvx"), "#!/bin/sh\nexit 0\n", "utf8");
+      },
+    };
+
+    const [first, second] = await Promise.all([ensureUv(options), ensureUv(options)]);
+
+    assert.equal(first, second);
+    assert.equal(downloadCalls.length, 1);
+    assert.ok(fs.existsSync(first));
+    assert.ok(fs.existsSync(path.join(cacheDir, "uv-bin", "uvx")));
+  } finally {
+    fs.rmSync(cacheDir, { recursive: true, force: true });
+  }
 });
