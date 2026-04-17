@@ -1092,6 +1092,7 @@ class MiniumRuntimeAdapter:
                 "initialized": False,
                 "hook_ids": {},
                 "pending_requests": {},
+                "pending_request_keys": {},
                 "mocked_interfaces": [],
             },
         )
@@ -1176,11 +1177,18 @@ class MiniumRuntimeAdapter:
             "pending_requests",
             {},
         )
-        pending_requests[str(call_id or request["requestId"])] = {
+        pending_request_keys = self._ensure_real_network_controls(session_metadata, network_state).setdefault(
+            "pending_request_keys",
+            {},
+        )
+        pending_key = self._build_real_network_pending_key(network_state, request, call_id)
+        pending_requests[pending_key] = {
             "request": dict(request),
+            "interface_name": interface_name,
             "intercept_rule_id": rule.rule_id if rule is not None else None,
             "outcome": outcome,
         }
+        pending_request_keys.setdefault(interface_name, []).append(pending_key)
 
         listener_ids = self._matching_network_listener_ids(
             network_state,
@@ -1211,7 +1219,19 @@ class MiniumRuntimeAdapter:
         pending_requests = runtime_state.get("pending_requests")
         if not isinstance(pending_requests, dict):
             return
-        pending = pending_requests.pop(str(call_id), None)
+        pending_request_keys = runtime_state.get("pending_request_keys")
+        if not isinstance(pending_request_keys, dict):
+            pending_request_keys = {}
+            runtime_state["pending_request_keys"] = pending_request_keys
+        pending_key = str(call_id) if call_id is not None else self._pop_real_network_pending_key(
+            pending_request_keys,
+            interface_name,
+        )
+        if pending_key is None:
+            return
+        if call_id is not None:
+            self._remove_real_network_pending_key(pending_request_keys, interface_name, pending_key)
+        pending = pending_requests.pop(pending_key, None)
         if not isinstance(pending, dict):
             return
 
@@ -1232,6 +1252,44 @@ class MiniumRuntimeAdapter:
             intercept_rule_id=pending.get("intercept_rule_id"),
             outcome=str(pending.get("outcome") or "continue"),
         )
+
+    @staticmethod
+    def _build_real_network_pending_key(
+        network_state: NetworkState,
+        request: dict[str, Any],
+        call_id: Any,
+    ) -> str:
+        request_id = request.get("requestId")
+        if request_id is None or str(request_id).strip() == "":
+            request_id = network_state.allocate_request_id()
+            request["requestId"] = request_id
+        return str(call_id) if call_id is not None else str(request_id)
+
+    @staticmethod
+    def _pop_real_network_pending_key(
+        pending_request_keys: dict[str, Any],
+        interface_name: str,
+    ) -> str | None:
+        interface_keys = pending_request_keys.get(interface_name)
+        if not isinstance(interface_keys, list) or len(interface_keys) == 0:
+            return None
+        key = interface_keys.pop(0)
+        if len(interface_keys) == 0:
+            pending_request_keys.pop(interface_name, None)
+        return str(key)
+
+    @staticmethod
+    def _remove_real_network_pending_key(
+        pending_request_keys: dict[str, Any],
+        interface_name: str,
+        pending_key: str,
+    ) -> None:
+        interface_keys = pending_request_keys.get(interface_name)
+        if not isinstance(interface_keys, list):
+            return
+        pending_request_keys[interface_name] = [key for key in interface_keys if str(key) != pending_key]
+        if len(pending_request_keys[interface_name]) == 0:
+            pending_request_keys.pop(interface_name, None)
 
     def _sync_real_network_intercepts(
         self,

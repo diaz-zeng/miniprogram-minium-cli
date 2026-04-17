@@ -32,6 +32,7 @@ class NetworkService:
     def start_listener(self, session_id: str, config: NetworkListenConfig) -> dict[str, Any]:
         session = self._require_session(session_id)
         listener_id = config.listener_id or session.network_state.allocate_listener_id()
+        self._strip_listener_id_from_events(session.network_state, listener_id)
         listener = NetworkListenerState(
             listener_id=listener_id,
             matcher=config.matcher,
@@ -61,6 +62,7 @@ class NetworkService:
                 details={"listener_id": listener_id},
             )
         self.runtime_adapter.stop_network_listener(session.metadata, session.network_state, listener_id)
+        self._strip_listener_id_from_events(session.network_state, listener_id)
         self.repository.update(session)
         return {
             "session_id": session_id,
@@ -289,3 +291,14 @@ class NetworkService:
         if listener_id is not None or matcher is None:
             return
         self.runtime_adapter.ensure_network_observation(session_metadata, network_state)
+
+    @staticmethod
+    def _strip_listener_id_from_events(network_state: NetworkState, listener_id: str) -> None:
+        for event in network_state.events:
+            if listener_id not in event.listener_ids:
+                continue
+            event.listener_ids = [
+                current_listener_id
+                for current_listener_id in event.listener_ids
+                if current_listener_id != listener_id
+            ]
