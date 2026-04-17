@@ -77,8 +77,8 @@ test("compute-prerelease-version derives a unique beta version from a stable bas
   }
 });
 
-test("compute-prerelease-version accepts a custom preid for canary publishing", async () => {
-  const fixtureDir = await fs.mkdtemp(path.join(os.tmpdir(), "minium-release-compute-canary-"));
+test("compute-prerelease-version accepts a custom preid", async () => {
+  const fixtureDir = await fs.mkdtemp(path.join(os.tmpdir(), "minium-release-compute-custom-preid-"));
 
   try {
     await writePackageJson(fixtureDir, "1.3.0");
@@ -88,7 +88,7 @@ test("compute-prerelease-version accepts a custom preid for canary publishing", 
       "--package",
       path.join(fixtureDir, "package.json"),
       "--preid",
-      "canary-pr-42",
+      "preview-pr-42",
       "--run-id",
       "789",
       "--run-attempt",
@@ -97,7 +97,7 @@ test("compute-prerelease-version accepts a custom preid for canary publishing", 
       "1234567890ab",
     ]);
 
-    assert.equal(stdout.trim(), "1.3.0-canary-pr-42.789.3.1234567");
+    assert.equal(stdout.trim(), "1.3.0-preview-pr-42.789.3.1234567");
   } finally {
     await fs.rm(fixtureDir, { recursive: true, force: true });
   }

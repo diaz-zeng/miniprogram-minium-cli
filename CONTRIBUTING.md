@@ -95,7 +95,7 @@ If you change runtime behavior, also verify the affected execution path manually
 
 - `main` represents the current stable release and should only receive formal release PRs from `hotfix/*`, `release/*`, or `next/*`.
 - `package.json.version` on each active release line must match the line version exactly and represent the target stable release for that line.
-- Same-repository PR heads publish `canary` builds, `release/*` publishes beta builds to npm `next`, and `next/*` publishes alpha builds to npm `alpha`.
+- `release/*` publishes beta builds to npm `next`, and `next/*` publishes alpha builds to npm `alpha`.
 - Stable releases are published after a merged formal release PR reaches `main`; the workflow then publishes npm `latest`, creates the tag, and creates the GitHub Release.
 - Stable releases require a matching `CHANGELOG.md` entry for the version being published; missing changelog content must fail the release workflow.
 - After PATCH or MINOR stable releases, forward-port applicable fixes into the active `release/*` and `next/*` lines.

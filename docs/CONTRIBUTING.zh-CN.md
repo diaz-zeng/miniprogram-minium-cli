@@ -95,7 +95,6 @@ pnpm test
 
 - `main` 表示当前稳定版本，只应接收来自 `hotfix/*`、`release/*`、`next/*` 的正式发布 PR。
 - 每条活跃版本线中的 `package.json.version` 必须与分支版本完全一致，并表示该版本线的目标正式版。
-- 同仓库 PR 源分支上的 push 会自动发布 npm `canary` 通道，用于验证该 PR 的最新构建。
 - `release/*` 分支上的 push 会自动发布 MINOR beta 到 npm `next`，`next/*` 分支上的 push 会自动发布 MAJOR alpha 到 npm `alpha`。
 - 正式版在正式发布 PR 合入 `main` 后发布到 npm `latest`，并由 workflow 自动创建 tag 和 GitHub Release。
 - 如果当前版本在 `CHANGELOG.md` 中没有对应章节，正式发布 workflow 必须失败，而不是创建空的 Release。

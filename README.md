@@ -149,9 +149,8 @@ npx skills add diaz-zeng/miniprogram-minium-cli --skill interactive-classname-ta
 
 ## Release Channels
 
-The repository publishes four npm channels:
+The repository publishes three npm channels:
 
-- `canary`: PR validation builds published from same-repository PR head branches
 - `alpha`: MAJOR prerelease builds published from active `next/x.y.z` branches
 - `next`: MINOR beta builds published from active `release/x.y.z` branches
 - `latest`: stable releases published after a formal release PR merges into `main`
@@ -159,7 +158,6 @@ The repository publishes four npm channels:
 Install prerelease channels explicitly:
 
 ```bash
-pnpm add -g miniprogram-minium-cli@canary
 pnpm add -g miniprogram-minium-cli@alpha
 pnpm add -g miniprogram-minium-cli@next
 ```
@@ -171,19 +169,18 @@ This repository treats `package.json.version` as the source of truth for the tar
 1. `main` always represents the current stable release and only accepts formal release PRs.
 2. Create `release/x.y.z` for the next MINOR line, `next/x.y.z` for the next MAJOR line, and `hotfix/x.y.z` for PATCH fixes against the current stable line.
 3. Ensure the branch version and `package.json.version` match exactly, for example `release/1.5.0` with `package.json.version = 1.5.0`.
-4. Same-repository PR head branches continue publishing unique canary builds such as `1.5.0-canary-pr-42.<run-id>.<attempt>.<sha>` to npm `canary`.
-5. Pushes on `release/x.y.z` publish MINOR beta builds such as `1.5.0-beta.<run-id>.<attempt>.<sha>` to npm `next`.
-6. Pushes on `next/x.y.z` publish MAJOR alpha builds such as `2.0.0-alpha.<run-id>.<attempt>.<sha>` to npm `alpha`.
-7. When a version line is ready, merge its formal release PR into `main`. The stable workflow validates the merged release branch, publishes npm `latest`, creates the `vX.Y.Z` tag, and creates the GitHub Release.
-8. Stable GitHub Releases use the matching `CHANGELOG.md` section as the primary release body and append auto-generated release notes. If the changelog entry is missing, the stable release fails.
-9. After every PATCH or MINOR stable release, forward-port the applicable fixes into the currently active `release/*` and `next/*` lines.
+4. Pushes on `release/x.y.z` publish MINOR beta builds such as `1.5.0-beta.<run-id>.<attempt>.<sha>` to npm `next`.
+5. Pushes on `next/x.y.z` publish MAJOR alpha builds such as `2.0.0-alpha.<run-id>.<attempt>.<sha>` to npm `alpha`.
+6. When a version line is ready, merge its formal release PR into `main`. The stable workflow validates the merged release branch, publishes npm `latest`, creates the `vX.Y.Z` tag, and creates the GitHub Release.
+7. Stable GitHub Releases use the matching `CHANGELOG.md` section as the primary release body and append auto-generated release notes. If the changelog entry is missing, the stable release fails.
+8. After every PATCH or MINOR stable release, forward-port the applicable fixes into the currently active `release/*` and `next/*` lines.
 
 Important release guards:
 
-- If the stable version in an active release line is already published to npm, the `canary`, `alpha`, and `next` prerelease workflows fail before `npm publish`.
+- If the stable version in an active release line is already published to npm, the `alpha` and `next` prerelease workflows fail before `npm publish`.
 - If the stable release cannot resolve a merged release PR into `main`, the workflow fails closed instead of publishing.
 - If the stable release cannot find the current version section in `CHANGELOG.md`, the workflow fails closed instead of creating the GitHub Release.
-- The floating `@canary`, `@alpha`, and `@next` dist-tags always point to the latest successful publish for that channel. Install the full version string if you need a specific build.
+- The floating `@alpha` and `@next` dist-tags always point to the latest successful publish for that channel. Install the full version string if you need a specific build.
 
 For local debugging of the release helpers:
 

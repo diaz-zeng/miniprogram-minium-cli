@@ -149,16 +149,14 @@ npx skills add diaz-zeng/miniprogram-minium-cli --skill interactive-classname-ta
 
 ## 发布通道
 
-这个仓库会维护四个 npm 通道：
+这个仓库会维护三个 npm 通道：
 
-- `canary`：同仓库 PR 源分支更新时发布的 canary 验证版
 - `alpha`：活跃 `next/x.y.z` 分支发布的 MAJOR 预发布版
 - `next`：活跃 `release/x.y.z` 分支发布的 MINOR beta 版
 - `latest`：正式发布 PR 合入 `main` 后发布的稳定版
 如果要显式安装预发布通道，请执行：
 
 ```bash
-pnpm add -g miniprogram-minium-cli@canary
 pnpm add -g miniprogram-minium-cli@alpha
 pnpm add -g miniprogram-minium-cli@next
 ```
@@ -170,19 +168,18 @@ pnpm add -g miniprogram-minium-cli@next
 1. `main` 永远代表当前稳定版本，只接收正式发布 PR。
 2. 使用 `release/x.y.z` 管理下一个 MINOR 版本，使用 `next/x.y.z` 管理下一个 MAJOR 版本，使用 `hotfix/x.y.z` 管理当前稳定版的 PATCH 修复。
 3. 确保分支名和 `package.json.version` 完全一致，例如 `release/1.5.0` 对应 `package.json.version = 1.5.0`。
-4. 同仓库 PR 源分支继续发布唯一的 canary 版本，例如 `1.5.0-canary-pr-42.<run-id>.<attempt>.<sha>`，并打到 npm `canary`。
-5. `release/x.y.z` 分支上的 push 会发布 MINOR beta 版本，例如 `1.5.0-beta.<run-id>.<attempt>.<sha>`，并打到 npm `next`。
-6. `next/x.y.z` 分支上的 push 会发布 MAJOR alpha 版本，例如 `2.0.0-alpha.<run-id>.<attempt>.<sha>`，并打到 npm `alpha`。
-7. 当某条版本线准备正式发版时，把对应的正式发布 PR 合入 `main`。stable workflow 会校验合入来源、发布 npm `latest`、自动创建 `vX.Y.Z` tag，并自动创建 GitHub Release。
-8. 正式版 GitHub Release 会把 `CHANGELOG.md` 中对应版本的章节作为主体内容，并附加自动生成的 release notes；如果 changelog 缺失，该次正式发布会直接失败。
-9. 每次 PATCH 或 MINOR 正式发布完成后，都要把适用修复继续前向同步到当前活跃的 `release/*` 和 `next/*` 版本线。
+4. `release/x.y.z` 分支上的 push 会发布 MINOR beta 版本，例如 `1.5.0-beta.<run-id>.<attempt>.<sha>`，并打到 npm `next`。
+5. `next/x.y.z` 分支上的 push 会发布 MAJOR alpha 版本，例如 `2.0.0-alpha.<run-id>.<attempt>.<sha>`，并打到 npm `alpha`。
+6. 当某条版本线准备正式发版时，把对应的正式发布 PR 合入 `main`。stable workflow 会校验合入来源、发布 npm `latest`、自动创建 `vX.Y.Z` tag，并自动创建 GitHub Release。
+7. 正式版 GitHub Release 会把 `CHANGELOG.md` 中对应版本的章节作为主体内容，并附加自动生成的 release notes；如果 changelog 缺失，该次正式发布会直接失败。
+8. 每次 PATCH 或 MINOR 正式发布完成后，都要把适用修复继续前向同步到当前活跃的 `release/*` 和 `next/*` 版本线。
 
 重要发布守卫：
 
-- 如果活跃版本线中的稳定版本已经正式存在于 npm，`canary`、`alpha` 和 `next` 预发布流水线都会在执行 `npm publish` 前直接失败。
+- 如果活跃版本线中的稳定版本已经正式存在于 npm，`alpha` 和 `next` 预发布流水线都会在执行 `npm publish` 前直接失败。
 - 如果 `main` 上的 stable workflow 无法解析出一个已经合入的正式发布 PR，workflow 会 fail closed，而不是继续发版。
 - 如果 stable workflow 找不到当前版本在 `CHANGELOG.md` 中对应的章节，workflow 会 fail closed，而不是创建空的 GitHub Release。
-- 浮动的 `@canary`、`@alpha`、`@next` dist-tag 永远指向当前该通道最新一次成功发布；如果你要安装精确构建，请直接使用完整版本号。
+- 浮动的 `@alpha`、`@next` dist-tag 永远指向当前该通道最新一次成功发布；如果你要安装精确构建，请直接使用完整版本号。
 
 如果需要在本地调试发布辅助脚本，可以执行：
 
