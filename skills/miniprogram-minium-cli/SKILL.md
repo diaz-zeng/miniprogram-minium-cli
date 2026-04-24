@@ -75,6 +75,7 @@ Read [references/plan-authoring.md](references/plan-authoring.md) before draftin
 - Use `exec ... --json` only when the current caller must consume structured stdout directly in the same command context.
 - Do not read persisted run artifacts by default when the CLI result already answers the validation question.
 - Read `summary.json`, `result.json`, `comparison.json`, `network.json`, or screenshots only when the observed result is unexpected or when the caller explicitly needs deeper evidence.
+- For network analysis, prefer `result.json.stepResults[].details.networkEvidence` and the bundled filter helper before reading the full `network.json`.
 
 ## Workflow
 
@@ -94,6 +95,10 @@ Read [references/plan-authoring.md](references/plan-authoring.md) before draftin
 6. For persisted run artifacts, read them lazily:
    - If the CLI outcome already matches the expected result, stop there unless the caller explicitly asks for artifact-level details.
    - If the CLI outcome is unexpected, start with the smallest useful artifact and expand only as needed.
+7. For network artifact analysis, use this order by default:
+   - Inspect `result.json` and the relevant `stepResults[].details.networkEvidence`
+   - Run `node skills/miniprogram-minium-cli/scripts/filter-network-artifact.mjs --result /path/to/result.json --pretty`
+   - Open the full `network.json` only when the filtered subgraph is still insufficient
 
 ## When to use `--json`
 

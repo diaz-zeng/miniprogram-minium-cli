@@ -1,0 +1,175 @@
+{
+  "version": 1,
+  "kind": "miniapp-test-plan",
+  "metadata": {
+    "name": "demo-network-local-server-real",
+    "draft": false
+  },
+  "environment": {
+    "projectPath": "../demo-miniapp",
+    "wechatDevtoolPath": null,
+    "testPort": 9420,
+    "language": "en-US",
+    "runtimeMode": "real"
+  },
+  "execution": {
+    "mode": "serial",
+    "failFast": true
+  },
+  "steps": [
+    {
+      "id": "step-1",
+      "type": "session.start",
+      "input": {
+        "projectPath": "../demo-miniapp",
+        "initialPagePath": "/pages/home/index"
+      }
+    },
+    {
+      "id": "step-2",
+      "type": "storage.set",
+      "input": {
+        "key": "networkBaseUrl",
+        "value": "http://127.0.0.1:9781"
+      }
+    },
+    {
+      "id": "step-3",
+      "type": "network.listen.start",
+      "input": {
+        "listenerId": "local-network",
+        "captureResponses": true
+      }
+    },
+    {
+      "id": "step-4",
+      "type": "element.click",
+      "input": {
+        "locator": {
+          "type": "id",
+          "value": "network-login-request-button"
+        }
+      }
+    },
+    {
+      "id": "step-5",
+      "type": "network.wait",
+      "input": {
+        "listenerId": "local-network",
+        "event": "response",
+        "timeoutMs": 3000,
+        "matcher": {
+          "url": "http://127.0.0.1:9781/api/login",
+          "method": "POST",
+          "statusCode": 200,
+          "responseBody": {
+            "source": "local-fixture"
+          }
+        }
+      }
+    },
+    {
+      "id": "step-6",
+      "type": "element.click",
+      "input": {
+        "locator": {
+          "type": "id",
+          "value": "network-reviews-request-button"
+        }
+      }
+    },
+    {
+      "id": "step-7",
+      "type": "network.wait",
+      "input": {
+        "listenerId": "local-network",
+        "event": "response",
+        "timeoutMs": 3000,
+        "matcher": {
+          "url": "http://127.0.0.1:9781/api/reviews",
+          "method": "GET",
+          "statusCode": 200,
+          "query": {
+            "tab": "main"
+          },
+          "responseBody": {
+            "source": "local-fixture"
+          }
+        }
+      }
+    },
+    {
+      "id": "step-8",
+      "type": "file.stage",
+      "input": {
+        "filePath": "minium://user-data/local-upload.txt",
+        "content": "local fixture upload payload\n"
+      }
+    },
+    {
+      "id": "step-9",
+      "type": "file.upload",
+      "input": {
+        "url": "http://127.0.0.1:9781/upload",
+        "filePath": "minium://user-data/local-upload.txt",
+        "name": "artifact"
+      }
+    },
+    {
+      "id": "step-10",
+      "type": "file.download",
+      "input": {
+        "url": "http://127.0.0.1:9781/reports/latest.bin"
+      }
+    },
+    {
+      "id": "step-11",
+      "type": "assert.networkRequest",
+      "input": {
+        "listenerId": "local-network",
+        "count": 4,
+        "withinMs": 10000
+      }
+    },
+    {
+      "id": "step-12",
+      "type": "assert.networkResponse",
+      "input": {
+        "listenerId": "local-network",
+        "matcher": {
+          "resourceType": "upload",
+          "url": "http://127.0.0.1:9781/upload",
+          "method": "POST",
+          "statusCode": 200
+        },
+        "count": 1
+      }
+    },
+    {
+      "id": "step-13",
+      "type": "assert.networkResponse",
+      "input": {
+        "listenerId": "local-network",
+        "matcher": {
+          "resourceType": "download",
+          "url": "http://127.0.0.1:9781/reports/latest.bin",
+          "method": "GET",
+          "statusCode": 200
+        },
+        "count": 1
+      }
+    },
+    {
+      "id": "step-14",
+      "type": "network.listen.stop",
+      "input": {
+        "listenerId": "local-network"
+      }
+    },
+    {
+      "id": "step-15",
+      "type": "session.close",
+      "input": {}
+    }
+  ]
+}

@@ -59,22 +59,54 @@
     },
     {
       "id": "step-4",
-      "type": "file.upload",
+      "type": "file.stage",
       "input": {
-        "url": "https://service.invalid/upload",
-        "filePath": "/tmp/bridge-demo.png",
-        "name": "artifact"
+        "filePath": "minium://user-data/bridge-demo.txt",
+        "content": "miniprogram-minium-cli demo upload fixture\n"
       }
     },
     {
       "id": "step-5",
+      "type": "network.intercept.add",
+      "input": {
+        "ruleId": "upload-mock",
+        "matcher": {
+          "resourceType": "upload",
+          "url": "https://service.invalid/upload",
+          "method": "POST"
+        },
+        "behavior": {
+          "action": "mock",
+          "response": {
+            "statusCode": 200,
+            "headers": {
+              "x-source": "mock"
+            },
+            "body": {
+              "ok": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "step-6",
+      "type": "file.upload",
+      "input": {
+        "url": "https://service.invalid/upload",
+        "filePath": "minium://user-data/bridge-demo.txt",
+        "name": "artifact"
+      }
+    },
+    {
+      "id": "step-7",
       "type": "file.download",
       "input": {
         "url": "https://service.invalid/reports/latest.bin"
       }
     },
     {
-      "id": "step-6",
+      "id": "step-8",
       "type": "network.wait",
       "input": {
         "listenerId": "transfer-network",
@@ -88,7 +120,7 @@
       }
     },
     {
-      "id": "step-7",
+      "id": "step-9",
       "type": "assert.networkRequest",
       "input": {
         "listenerId": "transfer-network",
@@ -101,7 +133,7 @@
       }
     },
     {
-      "id": "step-8",
+      "id": "step-10",
       "type": "assert.networkResponse",
       "input": {
         "listenerId": "transfer-network",
@@ -117,12 +149,12 @@
       }
     },
     {
-      "id": "step-9",
+      "id": "step-11",
       "type": "network.intercept.clear",
       "input": {}
     },
     {
-      "id": "step-10",
+      "id": "step-12",
       "type": "session.close",
       "input": {}
     }

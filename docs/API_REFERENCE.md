@@ -126,7 +126,18 @@ Typical artifact files:
 - `summary.json`
 - `result.json`
 - `comparison.json`
+- `network.json` for network-aware runs
 - screenshots
+
+For network-aware runs:
+
+- `network.json` uses a normalized run-level shape: `schemaVersion`, `events`, `requests`, `listeners`, `intercepts`, and `meta`
+- `result.json.stepResults[]` may expose `details.networkEvidence` with stable references back into `network.json`
+- the bundled skill helper can filter the artifact with:
+
+```bash
+node skills/miniprogram-minium-cli/scripts/filter-network-artifact.mjs --result /path/to/result.json --pretty
+```
 
 ### Exit Codes
 
@@ -488,6 +499,7 @@ The CLI currently supports these step types:
 - `media.takePhoto`
 - `media.getImageInfo`
 - `media.saveImageToPhotosAlbum`
+- `file.stage`
 - `file.upload`
 - `file.download`
 - `device.scanCode`
@@ -669,6 +681,8 @@ Required input:
 ### `network.listen.clear`
 
 Clears buffered network events for one listener or all listeners in the active session.
+
+Historical evidence already written into `network.json` is preserved. The clear operation resets the active listener view used by subsequent listener-scoped waits and assertions, and appends a lifecycle event to the network artifact.
 
 Optional input:
 
@@ -915,6 +929,7 @@ Supported steps:
 - `media.takePhoto`
 - `media.getImageInfo`
 - `media.saveImageToPhotosAlbum`
+- `file.stage`
 - `file.upload`
 - `file.download`
 - `device.scanCode`
@@ -928,8 +943,10 @@ Key input rules:
 - `location.open` requires `latitude` and `longitude`
 - `media.getImageInfo` requires `src`
 - `media.saveImageToPhotosAlbum` requires `filePath`
+- `file.stage` requires a `filePath` such as `minium://user-data/upload.txt` and either `content` or `contentBase64`
 - `file.upload` requires `url`, `filePath`, and `name`
 - `file.download` requires `url`
+- `file.upload` defaults `method` to `POST`; `file.download` defaults `method` to `GET` for real-runtime network mock matching
 - `device.makePhoneCall` requires `phoneNumber`
 - `subscription.requestMessage` requires a non-empty `tmplIds`
 
@@ -937,6 +954,31 @@ Result shape:
 
 - returns serializable bridge results under `result`
 - async capabilities either resolve to a final structured payload or fail with `ACTION_ERROR`
+- real runtime can upload files staged by `file.stage` from the miniapp user-data directory
+
+Staged upload example:
+
+```json
+[
+  {
+    "id": "stage-upload-file",
+    "type": "file.stage",
+    "input": {
+      "filePath": "minium://user-data/bridge-demo.txt",
+      "content": "upload fixture"
+    }
+  },
+  {
+    "id": "upload-staged-file",
+    "type": "file.upload",
+    "input": {
+      "url": "https://service.invalid/upload",
+      "filePath": "minium://user-data/bridge-demo.txt",
+      "name": "artifact"
+    }
+  }
+]
+```
 
 ### Bridge Skip Semantics Under `touristappid`
 

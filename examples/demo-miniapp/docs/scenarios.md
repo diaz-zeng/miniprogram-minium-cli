@@ -32,6 +32,7 @@ Purpose:
 - validate fuzzy lookup through partial text
 - validate text input and local state updates
 - validate modal open and close flows
+- validate request buttons against the default mock domain or a plan-provided local fixture server
 
 Typical coverage:
 
@@ -39,6 +40,7 @@ Typical coverage:
 - `assert.elementText`
 - `assert.elementVisible`
 - mixed exact and fuzzy selectors
+- `wx.request` observation through `network.*` steps
 
 ### Bridge Lab Page
 
@@ -129,5 +131,11 @@ Use exact plans when you want a low-noise baseline. Use fuzzy or mixed plans whe
 Bridge-focused plans add one more split:
 
 - default bridge plans: use `runtimeMode: "auto"` and focus on bridge actions that should remain usable in the demo miniapp
-- placeholder bridge plans: use `runtimeMode: "placeholder"` for APIs that depend on camera access, upload domains, device containers, or other external conditions
+- placeholder bridge plans: use `runtimeMode: "placeholder"` for APIs that depend on camera access, upload domains, device containers, or other external conditions; staged transfer plans can still be run in real runtime with explicit network mocks
 - restricted bridge plans: keep `runtimeMode: "auto"` but mark steps with `requiresDeveloperAppId` so the engine skips them under `touristappid`
+
+Network plans add one real-runtime local fixture:
+
+- `12-network-observation.placeholder.plan.json` remains a synthetic placeholder baseline for fast listener, wait, and ordered assertion checks; do not use it as real DevTools network acceptance evidence
+- `15-network-local-server.real.plan.json` writes `networkBaseUrl` into storage, then runs `wx.request`, `wx.uploadFile`, and `wx.downloadFile` against `examples/demo-regression/network-fixture-server.mjs`
+- the demo project keeps `urlCheck` disabled in `project.config.json` so DevTools can reach `http://127.0.0.1:9781` during this regression
