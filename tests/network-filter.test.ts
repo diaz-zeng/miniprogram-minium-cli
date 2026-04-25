@@ -1,7 +1,13 @@
 import * as assert from "node:assert/strict";
+import { execFile as execFileCallback } from "node:child_process";
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
+
+const execFile = promisify(execFileCallback);
 
 async function loadFilterModule() {
   return import(pathToFileURL(path.join(
@@ -265,4 +271,24 @@ test("filter helper rejects step ids that do not exist in result.json", async ()
     }),
     /Could not find step/,
   );
+});
+
+test("filter helper CLI runs from paths that require file URL escaping", async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "minium filter helper "));
+  const scriptPath = path.join(tempDir, "filter network artifact.mjs");
+
+  try {
+    await fs.copyFile(
+      path.join(process.cwd(), "skills/miniprogram-minium-cli/scripts/filter-network-artifact.mjs"),
+      scriptPath,
+    );
+
+    const { stdout } = await execFile(process.execPath, [scriptPath, "--help"], {
+      cwd: process.cwd(),
+    });
+
+    assert.match(stdout, /Usage:/);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
 });

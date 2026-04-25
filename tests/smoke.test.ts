@@ -408,6 +408,68 @@ test("placeholder network wait timeout returns a structured action error", async
   assert.ok(Array.isArray(failureDetails?.networkEvidence));
 });
 
+test("missing network listener failures do not emit dangling networkEvidence", async () => {
+  const artifactsDir = createArtifactsDir("minium-cli-network-missing-listener");
+  const plan: Plan = {
+    ...createBasePlan(artifactsDir),
+    metadata: {
+      name: "network-missing-listener",
+      draft: false,
+    },
+    steps: [
+      { id: "step-1", type: "session.start", input: { projectPath: "." } },
+      { id: "step-2", type: "network.listen.stop", input: { listenerId: "missing-listener" } },
+      { id: "step-3", type: "session.close", input: {} },
+    ],
+  };
+
+  const execution = await executePlanWithPython(plan);
+  assert.equal(execution.response.ok, true);
+  const result = execution.response.result as Record<string, unknown>;
+  const summary = result.summary as Record<string, unknown>;
+  const stepResults = result.stepResults as Array<Record<string, unknown>>;
+  const failedStep = stepResults[1];
+
+  assert.equal(summary.status, "failed");
+  assert.equal(failedStep?.status, "failed");
+  assert.equal(
+    ((failedStep?.error as Record<string, unknown>).error_code),
+    "ACTION_ERROR",
+  );
+  assert.equal(failedStep?.details, undefined);
+});
+
+test("missing network intercept rule failures do not emit dangling networkEvidence", async () => {
+  const artifactsDir = createArtifactsDir("minium-cli-network-missing-rule");
+  const plan: Plan = {
+    ...createBasePlan(artifactsDir),
+    metadata: {
+      name: "network-missing-rule",
+      draft: false,
+    },
+    steps: [
+      { id: "step-1", type: "session.start", input: { projectPath: "." } },
+      { id: "step-2", type: "network.intercept.remove", input: { ruleId: "missing-rule" } },
+      { id: "step-3", type: "session.close", input: {} },
+    ],
+  };
+
+  const execution = await executePlanWithPython(plan);
+  assert.equal(execution.response.ok, true);
+  const result = execution.response.result as Record<string, unknown>;
+  const summary = result.summary as Record<string, unknown>;
+  const stepResults = result.stepResults as Array<Record<string, unknown>>;
+  const failedStep = stepResults[1];
+
+  assert.equal(summary.status, "failed");
+  assert.equal(failedStep?.status, "failed");
+  assert.equal(
+    ((failedStep?.error as Record<string, unknown>).error_code),
+    "ACTION_ERROR",
+  );
+  assert.equal(failedStep?.details, undefined);
+});
+
 test("placeholder network listen clear preserves events still referenced by other listeners", async () => {
   const artifactsDir = createArtifactsDir("minium-cli-network-clear-shared");
   const plan: Plan = {

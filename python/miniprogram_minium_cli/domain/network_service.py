@@ -569,20 +569,22 @@ class NetworkService:
         if isinstance(event_payload, dict) and event_payload.get("eventId"):
             event_ids.append(str(event_payload["eventId"]))
         for event_id in _dedupe_strings(event_ids):
+            if not self._has_network_event_id(state, event_id):
+                continue
             evidence.append(
                 {
                     "eventId": self._canonical_id(session_id, event_id),
                     "summary": f"Referenced by step {step_id}",
                 }
             )
-        if listener_id:
+        if listener_id and self._has_listener_id(state, str(listener_id)):
             evidence.append(
                 {
                     "listenerId": self._canonical_id(session_id, str(listener_id)),
                     "summary": f"Referenced listener for step {step_id}",
                 }
             )
-        if intercept_id:
+        if intercept_id and self._has_intercept_id(state, str(intercept_id)):
             evidence.append(
                 {
                     "interceptId": self._canonical_id(session_id, str(intercept_id)),
@@ -772,6 +774,25 @@ class NetworkService:
         if not normalized:
             return None
         return f"{session_id}/{normalized}"
+
+    @staticmethod
+    def _has_network_event_id(network_state: NetworkState, event_id: str) -> bool:
+        normalized = str(event_id).strip()
+        if not normalized:
+            return False
+        return any(event.event_id == normalized for event in network_state.events) or any(
+            event.event_id == normalized for event in network_state.runtime_events
+        )
+
+    @staticmethod
+    def _has_listener_id(network_state: NetworkState, listener_id: str) -> bool:
+        normalized = str(listener_id).strip()
+        return bool(normalized and normalized in network_state.listener_history)
+
+    @staticmethod
+    def _has_intercept_id(network_state: NetworkState, intercept_id: str) -> bool:
+        normalized = str(intercept_id).strip()
+        return bool(normalized and normalized in network_state.intercept_history)
 
     def _build_evidence_item(self, session_id: str, *, runtime_event: NetworkRuntimeEvent) -> dict[str, Any]:
         request_id = self._canonical_id(session_id, runtime_event.request_id)

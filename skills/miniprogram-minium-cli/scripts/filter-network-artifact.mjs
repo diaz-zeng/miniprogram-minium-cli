@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 
+import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 
 const REQUEST_ID_ARRAY_KEYS = new Set([
   "matchedRequestIds",
@@ -526,7 +528,20 @@ function filterRecordObject(recordObject, selectedIds) {
   );
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+function isDirectEntrypoint(metaUrl, argvPath) {
+  if (!argvPath) {
+    return false;
+  }
+  const metaPath = fileURLToPath(metaUrl);
+  const resolvedArgvPath = path.resolve(argvPath);
+  try {
+    return realpathSync(metaPath) === realpathSync(resolvedArgvPath);
+  } catch {
+    return metaPath === resolvedArgvPath;
+  }
+}
+
+if (isDirectEntrypoint(import.meta.url, process.argv[1])) {
   const exitCode = await main();
   process.exitCode = exitCode;
 }
