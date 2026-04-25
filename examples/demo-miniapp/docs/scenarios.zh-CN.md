@@ -32,6 +32,7 @@
 - 验证基于部分文本的模糊定位
 - 验证文本输入和本地状态更新
 - 验证弹层打开与关闭流程
+- 验证网络按钮既能走默认 mock 域名，也能通过计划指定的本地 fixture server 发起真实请求
 
 典型覆盖：
 
@@ -39,6 +40,7 @@
 - `assert.elementText`
 - `assert.elementVisible`
 - 精确与模糊定位混合使用
+- 通过 `network.*` 步骤观测 `wx.request`
 
 ### Bridge 实验页
 
@@ -129,5 +131,11 @@
 bridge 相关计划还额外分成三类：
 
 - 默认 bridge 计划：使用 `runtimeMode: "auto"`，覆盖在示例小程序里默认应可使用的 bridge 能力
-- placeholder bridge 计划：使用 `runtimeMode: "placeholder"`，覆盖依赖相机、上传域名、设备容器或其他外部条件的 API
+- placeholder bridge 计划：使用 `runtimeMode: "placeholder"`，覆盖依赖相机、上传域名、设备容器或其他外部条件的 API；已 stage 文件并显式 mock 网络的传输计划也可以用 real runtime 运行
 - 受限 bridge 计划：保留 `runtimeMode: "auto"`，但通过 `requiresDeveloperAppId` 标记让执行器在 `touristappid` 下自动跳过
+
+网络计划还包含一个 real runtime 的本地 fixture：
+
+- `12-network-observation.placeholder.plan.json` 保留为 synthetic placeholder 基线，用于快速验证 listener、wait 和有序断言；不要把它作为真实开发者工具网络验收证据
+- `15-network-local-server.real.plan.json` 先把 `networkBaseUrl` 写入 storage，再让 `wx.request`、`wx.uploadFile` 和 `wx.downloadFile` 访问 `examples/demo-regression/network-fixture-server.mjs`
+- 示例项目在 `project.config.json` 里保持 `urlCheck` 关闭，这样开发者工具回归时可以访问 `http://127.0.0.1:9781`

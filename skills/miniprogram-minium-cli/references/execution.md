@@ -59,7 +59,7 @@ Use the bundled bridge-focused plans when you need a known-good starting point f
 miniprogram-minium-cli exec --plan ./examples/demo-regression/12-network-observation.placeholder.plan.json
 ```
 
-Use the bundled network-focused plans when you need a known-good starting point for request observation, filtered assertions, failure injection, mocked responses, or upload/download evidence.
+Use the placeholder network plans as fast synthetic baselines for request observation, filtered assertions, failure injection, mocked responses, or upload/download evidence. For real DevTools network acceptance, start the local fixture server and run `examples/demo-regression/15-network-local-server.real.plan.json`.
 
 ## Common overrides
 

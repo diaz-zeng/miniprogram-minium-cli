@@ -63,6 +63,7 @@ _BRIDGE_STEP_TYPES = {
     "media.takePhoto",
     "media.getImageInfo",
     "media.saveImageToPhotosAlbum",
+    "file.stage",
     "file.upload",
     "file.download",
     "device.scanCode",
@@ -79,6 +80,18 @@ _TOURIST_APPID_RESTRICTED_STEP_TYPES = {
     "location.get",
     "location.choose",
     "subscription.requestMessage",
+}
+
+_NETWORK_STEP_TYPES = {
+    "network.listen.start",
+    "network.listen.stop",
+    "network.listen.clear",
+    "network.wait",
+    "assert.networkRequest",
+    "assert.networkResponse",
+    "network.intercept.add",
+    "network.intercept.remove",
+    "network.intercept.clear",
 }
 
 
@@ -193,9 +206,10 @@ def _execute_plan(plan: dict[str, Any]) -> dict[str, Any]:
         summary["skipped"] = execution_result["skipped_steps"]
     if execution_result.get("latest_page_path"):
         summary["latestPagePath"] = execution_result["latest_page_path"]
-    if execution_result["network_activity"]["eventCount"] > 0:
-        summary["networkEventCount"] = execution_result["network_activity"]["eventCount"]
-        summary["networkSessionCount"] = execution_result["network_activity"]["sessionCount"]
+    network_meta = execution_result["network_activity"].get("meta", {})
+    if network_meta.get("eventCount", 0) > 0:
+        summary["networkEventCount"] = network_meta.get("eventCount")
+        summary["networkSessionCount"] = network_meta.get("sessionCount")
     if execution_result.get("failure_error"):
         summary["failure"] = execution_result["failure_error"]
 
@@ -212,6 +226,7 @@ def _execute_plan(plan: dict[str, Any]) -> dict[str, Any]:
         json.dumps(execution_result["network_activity"], ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+    _attach_network_artifact_path(execution_result["step_results"], str(network_path))
     result_payload = {
         "summary": summary,
         "stepResults": execution_result["step_results"],
@@ -292,6 +307,20 @@ def _normalize_step_for_comparison(step: dict[str, Any]) -> dict[str, Any]:
             normalized_error.pop("artifacts", None)
         normalized["error"] = normalized_error
     return normalized
+
+
+def _attach_network_artifact_path(step_results: list[dict[str, Any]], network_path: str) -> None:
+    for step_result in step_results:
+        details = step_result.get("details")
+        if not isinstance(details, dict):
+            continue
+        network_evidence = details.get("networkEvidence")
+        if not isinstance(network_evidence, list):
+            continue
+        for item in network_evidence:
+            if not isinstance(item, dict):
+                continue
+            item["artifactPath"] = network_path
 
 
 def _strip_volatile_fields(value: Any) -> Any:
@@ -411,8 +440,10 @@ class _ExecutionEngine:
 
     def _execute_step(self, step: dict[str, Any]) -> dict[str, Any]:
         step_type = step["type"]
+        step_id = step.get("id")
         input_data = step.get("input", {})
         started_at = time.perf_counter()
+        network_session_id: str | None = None
 
         skip_result = self._maybe_skip_step(step_type, input_data)
         if skip_result is not None:
@@ -475,48 +506,66 @@ class _ExecutionEngine:
                     locator,
                 )
             elif step_type == "network.listen.start":
+                network_session_id = self._require_session_id(input_data)
                 output = self._network_service.start_listener(
-                    self._require_session_id(input_data),
+                    network_session_id,
                     NetworkListenConfig.from_input(input_data),
+                    step_id=step_id,
                 )
             elif step_type == "network.listen.stop":
+                network_session_id = self._require_session_id(input_data)
                 output = self._network_service.stop_listener(
-                    self._require_session_id(input_data),
+                    network_session_id,
                     str(input_data["listenerId"]),
+                    step_id=step_id,
                 )
             elif step_type == "network.listen.clear":
+                network_session_id = self._require_session_id(input_data)
                 output = self._network_service.clear_listener_events(
-                    self._require_session_id(input_data),
+                    network_session_id,
                     input_data.get("listenerId"),
+                    step_id=step_id,
                 )
             elif step_type == "network.wait":
+                network_session_id = self._require_session_id(input_data)
                 output = self._network_service.wait_for_event(
-                    self._require_session_id(input_data),
+                    network_session_id,
                     NetworkWaitConfig.from_input(input_data),
+                    step_id=step_id,
                 )
             elif step_type == "assert.networkRequest":
+                network_session_id = self._require_session_id(input_data)
                 output = self._network_service.assert_request(
-                    self._require_session_id(input_data),
+                    network_session_id,
                     NetworkAssertConfig.from_input(input_data),
+                    step_id=step_id,
                 )
             elif step_type == "assert.networkResponse":
+                network_session_id = self._require_session_id(input_data)
                 output = self._network_service.assert_response(
-                    self._require_session_id(input_data),
+                    network_session_id,
                     NetworkAssertConfig.from_input(input_data),
+                    step_id=step_id,
                 )
             elif step_type == "network.intercept.add":
+                network_session_id = self._require_session_id(input_data)
                 output = self._network_service.add_intercept_rule(
-                    self._require_session_id(input_data),
+                    network_session_id,
                     NetworkInterceptConfig.from_input(input_data),
+                    step_id=step_id,
                 )
             elif step_type == "network.intercept.remove":
+                network_session_id = self._require_session_id(input_data)
                 output = self._network_service.remove_intercept_rule(
-                    self._require_session_id(input_data),
+                    network_session_id,
                     str(input_data["ruleId"]),
+                    step_id=step_id,
                 )
             elif step_type == "network.intercept.clear":
+                network_session_id = self._require_session_id(input_data)
                 output = self._network_service.clear_intercept_rules(
-                    self._require_session_id(input_data),
+                    network_session_id,
+                    step_id=step_id,
                 )
             elif step_type in _BRIDGE_STEP_TYPES:
                 output = self._action_service.execute_bridge_action(
@@ -590,7 +639,7 @@ class _ExecutionEngine:
                     )
             self._record_error_artifacts(error)
             self._logger.error("Step %s (%s) failed: %s", step.get("id"), step_type, error.message)
-            return {
+            failure_result = {
                 "id": step.get("id"),
                 "type": step_type,
                 "ok": False,
@@ -599,6 +648,16 @@ class _ExecutionEngine:
                 "error": error.to_response(),
                 "durationMs": int((time.perf_counter() - started_at) * 1000),
             }
+            details = self._build_network_details(
+                step_id=step_id,
+                step_type=step_type,
+                session_id=network_session_id,
+                output=None,
+                input_data=input_data,
+            )
+            if details is not None:
+                failure_result["details"] = details
+            return failure_result
 
         if self._should_capture_after_success() and step_type not in {"artifact.screenshot", "session.close"}:
             auto_capture = self._capture_auto_screenshot(step)
@@ -607,7 +666,7 @@ class _ExecutionEngine:
         self._record_output_artifact(output)
 
         self._logger.info("Step %s (%s) completed.", step.get("id"), step_type)
-        return {
+        success_result = {
             "id": step.get("id"),
             "type": step_type,
             "ok": True,
@@ -615,9 +674,40 @@ class _ExecutionEngine:
             "output": output,
             "durationMs": int((time.perf_counter() - started_at) * 1000),
         }
+        details = self._build_network_details(
+            step_id=step_id,
+            step_type=step_type,
+            session_id=network_session_id,
+            output=output,
+            input_data=input_data,
+        )
+        if details is not None:
+            success_result["details"] = details
+        return success_result
 
     def _should_capture_after_success(self) -> bool:
         return self._auto_screenshot_mode in {"on-success", "always"}
+
+    def _build_network_details(
+        self,
+        *,
+        step_id: str | None,
+        step_type: str,
+        session_id: str | None,
+        output: dict[str, Any] | None,
+        input_data: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        if step_type not in _NETWORK_STEP_TYPES or step_id is None or session_id is None:
+            return None
+        network_evidence = self._network_service.collect_step_network_evidence(
+            session_id,
+            step_id=step_id,
+            output=output,
+            input_data=input_data,
+        )
+        if not network_evidence:
+            return None
+        return {"networkEvidence": network_evidence}
 
     def _capture_auto_screenshot(
         self,

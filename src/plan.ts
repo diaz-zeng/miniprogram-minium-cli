@@ -59,6 +59,7 @@ export const SUPPORTED_STEP_TYPES = Object.freeze([
   "media.takePhoto",
   "media.getImageInfo",
   "media.saveImageToPhotosAlbum",
+  "file.stage",
   "file.upload",
   "file.download",
   "device.scanCode",
@@ -193,6 +194,7 @@ const BRIDGE_STEP_TYPES = new Set<SupportedStepType>([
   "media.takePhoto",
   "media.getImageInfo",
   "media.saveImageToPhotosAlbum",
+  "file.stage",
   "file.upload",
   "file.download",
   "device.scanCode",
@@ -529,6 +531,19 @@ function validateStepShape(step: PlanStep, index: number, plan: Partial<Plan>, e
     }
     case "media.saveImageToPhotosAlbum": {
       requireStringField(step, index, "filePath", errors);
+      break;
+    }
+    case "file.stage": {
+      requireStringField(step, index, "filePath", errors);
+      const hasContent = typeof step.input.content === "string";
+      const hasContentBase64 = typeof step.input.contentBase64 === "string";
+      if (!hasContent && !hasContentBase64) {
+        errors.push(`steps[${index}] file.stage requires content or contentBase64.`);
+      }
+      if (hasContent && hasContentBase64) {
+        errors.push(`steps[${index}] file.stage cannot combine content and contentBase64.`);
+      }
+      requireOptionalStringField(step, index, "encoding", errors);
       break;
     }
     case "file.upload": {

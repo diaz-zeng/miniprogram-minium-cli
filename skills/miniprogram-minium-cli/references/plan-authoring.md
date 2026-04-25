@@ -22,9 +22,10 @@ Bridge-heavy examples:
 
 Network-focused examples:
 
-- `examples/demo-regression/12-network-observation.placeholder.plan.json`
+- `examples/demo-regression/12-network-observation.placeholder.plan.json` for synthetic placeholder observation checks
 - `examples/demo-regression/13-network-failure.placeholder.plan.json`
 - `examples/demo-regression/14-network-transfer.placeholder.plan.json`
+- `examples/demo-regression/15-network-local-server.real.plan.json` for real DevTools request, upload, and download acceptance
 
 ## Core rules
 

@@ -8,6 +8,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-04-25
+
+### Added
+
+- Run-level `network.json` artifact indexes for events, requests, listeners, and intercepts, plus per-step `networkEvidence` links in `result.json`.
+- Network artifact filtering helper at `skills/miniprogram-minium-cli/scripts/filter-network-artifact.mjs` for reducing large run artifacts to the request graph relevant to selected steps.
+- `file.stage` bridge action for staging deterministic upload fixtures into miniapp user data before `file.upload`.
+- Local fixture-server regression coverage through `examples/demo-regression/network-fixture-server.mjs` and `15-network-local-server.real.plan.json`, covering real `wx.request`, `wx.uploadFile`, and `wx.downloadFile` execution in WeChat DevTools.
+
+### Changed
+
+- Network waits and assertions now use the aligned artifact model so matched request and response evidence is easier for agents to inspect without scanning the full event log.
+- Demo network regression docs now distinguish fast synthetic placeholder baselines from the real local-server network acceptance plan.
+- Archived the completed `add-network-request-controls` OpenSpec change and added main specs for network observation and interception.
+- Updated the release target version to `1.4.0`.
+
 ## [1.3.0] - 2026-04-17
 
 ### Added

@@ -26,6 +26,16 @@ The bundled plans use:
 - `runtimeMode: "auto"` so the same plan can be inspected without hardcoding a machine-specific DevTools path
 - a mix of exact and fuzzy selectors to cover both deterministic regression baselines and agent-friendly text matching
 
+The local-network plan also needs the fixture server to be running before execution:
+
+```bash
+node examples/demo-regression/network-fixture-server.mjs --port 9781
+```
+
+The demo miniapp disables DevTools URL checks through `project.config.json` so `15-network-local-server.real.plan.json` can exercise real `wx.request`, `wx.uploadFile`, and `wx.downloadFile` calls against `http://127.0.0.1:9781`.
+
+Use the placeholder network plans as fast synthetic baselines. They validate listener, wait, assertion, failure, mock, and artifact logic without depending on DevTools, local ports, or external network state. Use `15-network-local-server.real.plan.json` as the real-runtime network acceptance plan.
+
 Bridge-focused plans intentionally add one exception:
 
 - `10-bridge-medium.placeholder.plan.json` uses `runtimeMode: "placeholder"` because those APIs depend on permissions, upload domains, camera containers, or other host conditions that the demo miniapp does not own
@@ -45,6 +55,7 @@ If you want screenshots to be collected automatically during regression runs, ad
 - `09-bridge-high-priority.exact.plan.json`: high-priority bridge actions for storage, navigation, app context, settings, clipboard, and feedback UI
 - `10-bridge-medium.placeholder.plan.json`: placeholder-safe medium-priority bridge actions for location open, media, file, device, and auth flows
 - `11-bridge-tourist-skip.exact.plan.json`: AppID-restricted bridge actions that should be skipped automatically while the demo project uses `touristappid`
-- `12-network-observation.placeholder.plan.json`: network listening, filtered waits, and ordered request assertions
+- `12-network-observation.placeholder.plan.json`: synthetic placeholder baseline for network listening, filtered waits, and ordered request assertions
 - `13-network-failure.placeholder.plan.json`: forced request failure with structured response assertions
-- `14-network-transfer.placeholder.plan.json`: upload and download observation with mocked download responses
+- `14-network-transfer.placeholder.plan.json`: staged upload and download observation with mocked transfer responses
+- `15-network-local-server.real.plan.json`: real-runtime local server flow for request, staged upload, download, and network artifact assertions

@@ -63,6 +63,11 @@ test("validatePlan accepts supported bridge step types", () => {
       },
       {
         id: "step-4",
+        type: "file.stage",
+        input: { filePath: "minium://user-data/bridge-demo.txt", content: "demo" },
+      },
+      {
+        id: "step-5",
         type: "subscription.requestMessage",
         input: { tmplIds: ["tmpl-demo"] },
       },
@@ -70,6 +75,44 @@ test("validatePlan accepts supported bridge step types", () => {
   });
 
   assert.equal(validation.ok, true);
+});
+
+test("validatePlan rejects invalid file staging input", () => {
+  const validation = validatePlan({
+    version: PLAN_VERSION,
+    kind: PLAN_KIND,
+    metadata: { draft: false, name: "invalid-file-stage" },
+    execution: { mode: "serial", failFast: true },
+    environment: {
+      projectPath: "/tmp/demo-miniapp",
+      artifactsDir: null,
+      wechatDevtoolPath: null,
+      testPort: 9420,
+      language: "en",
+    },
+    steps: [
+      {
+        id: "step-1",
+        type: "file.stage",
+        input: {
+          filePath: "minium://user-data/missing-content.txt",
+        },
+      },
+      {
+        id: "step-2",
+        type: "file.stage",
+        input: {
+          filePath: "minium://user-data/ambiguous-content.txt",
+          content: "plain",
+          contentBase64: "cGxhaW4=",
+        },
+      },
+    ],
+  });
+
+  assert.equal(validation.ok, false);
+  assert.match(validation.errors.join("\n"), /file\.stage requires content or contentBase64/);
+  assert.match(validation.errors.join("\n"), /file\.stage cannot combine content and contentBase64/);
 });
 
 test("validatePlan accepts supported network step types", () => {

@@ -189,7 +189,12 @@ test("placeholder bridge actions pass end-to-end and expose structured outputs",
       { id: "step-5", type: "clipboard.get", input: {} },
       { id: "step-6", type: "navigation.navigateTo", input: { url: "/pages/bridge-lab/index" } },
       { id: "step-7", type: "app.getLaunchOptions", input: {} },
-      { id: "step-8", type: "session.close", input: {} },
+      {
+        id: "step-8",
+        type: "file.stage",
+        input: { filePath: "minium://user-data/bridge-demo.txt", content: "demo upload fixture" },
+      },
+      { id: "step-9", type: "session.close", input: {} },
     ],
   };
 
@@ -214,6 +219,10 @@ test("placeholder bridge actions pass end-to-end and expose structured outputs",
   assert.equal(
     (((stepResults[5]?.output as Record<string, unknown>).result as Record<string, unknown>).pagePath),
     "pages/bridge-lab/index",
+  );
+  assert.equal(
+    (((stepResults[7]?.output as Record<string, unknown>).result as Record<string, unknown>).filePath),
+    "minium://user-data/bridge-demo.txt",
   );
 });
 
@@ -279,11 +288,15 @@ test("placeholder network observation and interception steps pass end-to-end", a
   const stepResults = result.stepResults as Array<Record<string, unknown>>;
   const artifacts = result.artifacts as Record<string, unknown>;
   const network = result.network as Record<string, unknown>;
+  const networkMeta = network.meta as Record<string, unknown>;
 
   assert.equal(summary.status, "passed");
-  assert.equal(summary.networkEventCount, 4);
   assert.ok(fs.existsSync(String(artifacts.networkPath)));
-  assert.equal(network.eventCount, 4);
+  assert.equal(network.schemaVersion, 1);
+  assert.equal(summary.networkEventCount, networkMeta.eventCount);
+  assert.ok(Number(networkMeta.eventCount) >= 4);
+  assert.ok(Array.isArray(((stepResults[4]?.details as Record<string, unknown>)?.networkEvidence)));
+  assert.ok(Array.isArray(((stepResults[8]?.details as Record<string, unknown>)?.networkEvidence)));
   assert.equal(
     (stepResults[4]?.output as Record<string, unknown>).matched_count,
     1,
@@ -383,6 +396,7 @@ test("placeholder network wait timeout returns a structured action error", async
   const summary = result.summary as Record<string, unknown>;
   const stepResults = result.stepResults as Array<Record<string, unknown>>;
   const failure = summary.failure as Record<string, unknown>;
+  const failureDetails = stepResults[2]?.details as Record<string, unknown>;
 
   assert.equal(summary.status, "failed");
   assert.equal(failure.error_code, "ACTION_ERROR");
@@ -391,6 +405,69 @@ test("placeholder network wait timeout returns a structured action error", async
     ((stepResults[2]?.error as Record<string, unknown>).error_code),
     "ACTION_ERROR",
   );
+  assert.ok(Array.isArray(failureDetails?.networkEvidence));
+});
+
+test("missing network listener failures do not emit dangling networkEvidence", async () => {
+  const artifactsDir = createArtifactsDir("minium-cli-network-missing-listener");
+  const plan: Plan = {
+    ...createBasePlan(artifactsDir),
+    metadata: {
+      name: "network-missing-listener",
+      draft: false,
+    },
+    steps: [
+      { id: "step-1", type: "session.start", input: { projectPath: "." } },
+      { id: "step-2", type: "network.listen.stop", input: { listenerId: "missing-listener" } },
+      { id: "step-3", type: "session.close", input: {} },
+    ],
+  };
+
+  const execution = await executePlanWithPython(plan);
+  assert.equal(execution.response.ok, true);
+  const result = execution.response.result as Record<string, unknown>;
+  const summary = result.summary as Record<string, unknown>;
+  const stepResults = result.stepResults as Array<Record<string, unknown>>;
+  const failedStep = stepResults[1];
+
+  assert.equal(summary.status, "failed");
+  assert.equal(failedStep?.status, "failed");
+  assert.equal(
+    ((failedStep?.error as Record<string, unknown>).error_code),
+    "ACTION_ERROR",
+  );
+  assert.equal(failedStep?.details, undefined);
+});
+
+test("missing network intercept rule failures do not emit dangling networkEvidence", async () => {
+  const artifactsDir = createArtifactsDir("minium-cli-network-missing-rule");
+  const plan: Plan = {
+    ...createBasePlan(artifactsDir),
+    metadata: {
+      name: "network-missing-rule",
+      draft: false,
+    },
+    steps: [
+      { id: "step-1", type: "session.start", input: { projectPath: "." } },
+      { id: "step-2", type: "network.intercept.remove", input: { ruleId: "missing-rule" } },
+      { id: "step-3", type: "session.close", input: {} },
+    ],
+  };
+
+  const execution = await executePlanWithPython(plan);
+  assert.equal(execution.response.ok, true);
+  const result = execution.response.result as Record<string, unknown>;
+  const summary = result.summary as Record<string, unknown>;
+  const stepResults = result.stepResults as Array<Record<string, unknown>>;
+  const failedStep = stepResults[1];
+
+  assert.equal(summary.status, "failed");
+  assert.equal(failedStep?.status, "failed");
+  assert.equal(
+    ((failedStep?.error as Record<string, unknown>).error_code),
+    "ACTION_ERROR",
+  );
+  assert.equal(failedStep?.details, undefined);
 });
 
 test("placeholder network listen clear preserves events still referenced by other listeners", async () => {
@@ -432,20 +509,23 @@ test("placeholder network listen clear preserves events still referenced by othe
   const result = execution.response.result as Record<string, unknown>;
   const summary = result.summary as Record<string, unknown>;
   const stepResults = result.stepResults as Array<Record<string, unknown>>;
+  const network = result.network as Record<string, unknown>;
+  const requestRecords = Object.values((network.requests as Record<string, unknown>) ?? {});
 
   assert.equal(summary.status, "passed");
   assert.equal(
     (stepResults[4]?.output as Record<string, unknown>).cleared_event_count,
-    0,
+    1,
   );
   assert.equal(
     (stepResults[4]?.output as Record<string, unknown>).remaining_event_count,
-    2,
+    0,
   );
   assert.equal(
     (stepResults[5]?.output as Record<string, unknown>).matched_count,
     1,
   );
+  assert.equal(requestRecords.length, 1);
 });
 
 test("placeholder listener id reuse does not match stale events from a stopped listener", async () => {
@@ -995,6 +1075,194 @@ test("real async bridge calls preserve millisecond timeout precision", async () 
   );
 });
 
+test("real runtime file.stage stages upload fixtures into user data", async () => {
+  const workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), "minium-cli-real-file-stage-"));
+  const fakeModuleDir = path.join(workspaceDir, "fake-python");
+  const projectPath = path.join(workspaceDir, "miniapp");
+  const devtoolPath = path.join(workspaceDir, "wechat-devtool");
+  const artifactsDir = path.join(workspaceDir, "artifacts");
+  const bridgeLogPath = path.join(workspaceDir, "bridge-log.json");
+  const testPort = await getAvailablePort();
+
+  fs.mkdirSync(fakeModuleDir, { recursive: true });
+  fs.mkdirSync(projectPath, { recursive: true });
+  fs.writeFileSync(path.join(projectPath, "project.config.json"), "{}\n", "utf8");
+  fs.writeFileSync(
+    path.join(fakeModuleDir, "minium.py"),
+    [
+      "import json",
+      "from pathlib import Path",
+      "",
+      `LOG_PATH = Path(${JSON.stringify(bridgeLogPath)})`,
+      "",
+      "def _append(event, payload):",
+      "    records = []",
+      "    if LOG_PATH.exists():",
+      "        records = json.loads(LOG_PATH.read_text(encoding='utf-8') or '[]')",
+      "    records.append({'event': event, **payload})",
+      "    LOG_PATH.write_text(json.dumps(records), encoding='utf-8')",
+      "",
+      "class _Page:",
+      "    def __init__(self):",
+      "        self.path = '/pages/bridge-lab/index'",
+      "        self.renderer = 'webview'",
+      "        self.plugin_appid = ''",
+      "",
+      "class _App:",
+      "    def __init__(self):",
+      "        self._page = _Page()",
+      "        self._pending = {}",
+      "        self._message_index = 0",
+      "",
+      "    def get_current_page(self):",
+      "        return self._page",
+      "",
+      "    def navigate_to(self, path):",
+      "        self._page.path = path",
+      "        return self._page",
+      "",
+      "    def evaluate(self, app_function, args=None, sync=False, desc=None):",
+      "        _ = app_function",
+      "        payload = (args or [{}])[0]",
+      "        file_path = 'http://usr/' + payload['fileName']",
+      "        result = {",
+      "            'filePath': file_path,",
+      "            'fileName': payload['fileName'],",
+      "            'encoding': payload.get('encoding') or ('base64' if payload.get('contentBase64') is not None else 'utf8'),",
+      "            'contentLength': len(str(payload.get('contentBase64') if payload.get('contentBase64') is not None else payload.get('content') or '')),",
+      "            'staged': True,",
+      "        }",
+      "        _append('stage', {'payload': payload, 'result': result, 'sync': sync, 'desc': desc})",
+      "        return {'result': {'result': result}}",
+      "",
+      "    def call_wx_method_async(self, method, payload):",
+      "        self._message_index += 1",
+      "        message_id = f'async-{self._message_index}'",
+      "        options = dict(payload or {})",
+      "        _append('async', {'method': method, 'payload': options})",
+      "        if method == 'uploadFile':",
+      "            response = {'statusCode': 200, 'data': '{\"ok\":true}', 'errMsg': 'uploadFile:ok'}",
+      "        elif method == 'downloadFile':",
+      "            response = {'statusCode': 200, 'tempFilePath': 'http://tmp/download.bin', 'errMsg': 'downloadFile:ok'}",
+      "        else:",
+      "            response = {'statusCode': 200}",
+      "        self._pending[message_id] = response",
+      "        return message_id",
+      "",
+      "    def get_async_response(self, message_id, timeout=0):",
+      "        _ = timeout",
+      "        response = self._pending.pop(message_id, None)",
+      "        if response is None:",
+      "            return None",
+      "        return {'result': {'result': response}}",
+      "",
+      "class Minium:",
+      "    def __init__(self, conf):",
+      "        self.conf = conf",
+      "        self.app = _App()",
+      "",
+      "    def shutdown(self):",
+      "        _append('shutdown', {})",
+      "        return None",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  fs.writeFileSync(
+    devtoolPath,
+    [
+      "#!/bin/sh",
+      "PORT=\"\"",
+      "while [ \"$#\" -gt 0 ]; do",
+      "  if [ \"$1\" = \"--auto-port\" ]; then",
+      "    PORT=\"$2\"",
+      "    shift 2",
+      "  else",
+      "    shift",
+      "  fi",
+      "done",
+      "node -e \"const net=require('net'); const port=Number(process.argv[1]); const server=net.createServer(()=>{}); server.listen(port,'127.0.0.1',()=>{}); setTimeout(()=>server.close(()=>process.exit(0)), 15000);\" \"$PORT\" >/dev/null 2>&1 &",
+      "exit 0",
+      "",
+    ].join("\n"),
+    { encoding: "utf8", mode: 0o755 },
+  );
+
+  const stagedPath = "minium://user-data/bridge-demo.txt";
+  const plan: Plan = {
+    ...createBasePlan(artifactsDir),
+    metadata: {
+      name: "real-file-stage-upload",
+      draft: false,
+    },
+    environment: {
+      projectPath,
+      artifactsDir,
+      wechatDevtoolPath: devtoolPath,
+      testPort,
+      language: "en-US",
+      runtimeMode: "real",
+    },
+    steps: [
+      { id: "step-1", type: "session.start", input: { projectPath, initialPagePath: "/pages/bridge-lab/index" } },
+      {
+        id: "step-2",
+        type: "file.stage",
+        input: {
+          filePath: stagedPath,
+          content: "upload fixture",
+        },
+      },
+      {
+        id: "step-3",
+        type: "file.upload",
+        input: {
+          url: "https://service.invalid/upload",
+          filePath: stagedPath,
+          name: "artifact",
+        },
+      },
+      {
+        id: "step-4",
+        type: "file.download",
+        input: {
+          url: "https://service.invalid/reports/latest.bin",
+        },
+      },
+      { id: "step-5", type: "session.close", input: {} },
+    ],
+  };
+
+  const execution = await executePlanWithPython(plan, {
+    env: {
+      ...process.env,
+      PYTHONPATH: process.env.PYTHONPATH
+        ? `${fakeModuleDir}${path.delimiter}${process.env.PYTHONPATH}`
+        : fakeModuleDir,
+    },
+  });
+
+  assert.equal(execution.response.ok, true);
+  const result = execution.response.result as Record<string, unknown>;
+  const summary = result.summary as Record<string, unknown>;
+  const stepResults = result.stepResults as Array<Record<string, unknown>>;
+  const stageOutput = (stepResults[1]?.output as Record<string, unknown>).result as Record<string, unknown>;
+  const bridgeLog = JSON.parse(fs.readFileSync(bridgeLogPath, "utf8")) as Array<Record<string, unknown>>;
+  const uploadCall = bridgeLog.find(
+    (entry) => entry.event === "async" && entry.method === "uploadFile",
+  ) as Record<string, unknown>;
+  const downloadCall = bridgeLog.find(
+    (entry) => entry.event === "async" && entry.method === "downloadFile",
+  ) as Record<string, unknown>;
+
+  assert.equal(summary.status, "passed");
+  assert.equal(stageOutput.logicalFilePath, stagedPath);
+  assert.equal(stageOutput.filePath, "http://usr/bridge-demo.txt");
+  assert.equal((uploadCall.payload as Record<string, unknown>).filePath, "http://usr/bridge-demo.txt");
+  assert.equal((uploadCall.payload as Record<string, unknown>).method, "POST");
+  assert.equal((downloadCall.payload as Record<string, unknown>).method, "GET");
+});
+
 test("real runtime network hooks drive observation, mocking, and cleanup", async () => {
   const workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), "minium-cli-real-network-"));
   const fakeModuleDir = path.join(workspaceDir, "fake-python");
@@ -1270,6 +1538,7 @@ test("real runtime network hooks drive observation, mocking, and cleanup", async
   const result = execution.response.result as Record<string, unknown>;
   const summary = result.summary as Record<string, unknown>;
   const network = result.network as Record<string, unknown>;
+  const networkMeta = network.meta as Record<string, unknown>;
   const cleanupLog = JSON.parse(fs.readFileSync(cleanupLogPath, "utf8")) as Array<Record<string, unknown>>;
   const releaseMethods = cleanupLog
     .filter((entry) => entry.event === "release")
@@ -1280,8 +1549,9 @@ test("real runtime network hooks drive observation, mocking, and cleanup", async
     .map((entry) => entry.method);
 
   assert.equal(summary.status, "passed");
-  assert.equal(summary.networkEventCount, 4);
-  assert.equal(network.eventCount, 4);
+  assert.equal(network.schemaVersion, 1);
+  assert.equal(summary.networkEventCount, networkMeta.eventCount);
+  assert.ok(Number(networkMeta.eventCount) >= 4);
   assert.deepEqual(releaseMethods, ["downloadFile", "request", "uploadFile"]);
   assert.ok(restoreMethods.includes("downloadFile"));
 });

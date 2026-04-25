@@ -126,7 +126,18 @@ miniprogram-minium-cli exec (--plan <file> | --plan-json <json>) [options]
 - `summary.json`
 - `result.json`
 - `comparison.json`
+- 网络相关 run 的 `network.json`
 - 截图文件
+
+对于网络相关 run：
+
+- `network.json` 的固定 run 级结构为 `schemaVersion`、`events`、`requests`、`listeners`、`intercepts`、`meta`
+- `result.json.stepResults[]` 可能通过 `details.networkEvidence` 暴露稳定引用，直接回跳到 `network.json`
+- 可以通过随仓库 skill 一起分发的 helper 脚本过滤网络产物：
+
+```bash
+node skills/miniprogram-minium-cli/scripts/filter-network-artifact.mjs --result /path/to/result.json --pretty
+```
 
 ### 退出码
 
@@ -488,6 +499,7 @@ draft plan 作为数据是合法的，但 `exec` 只接受 `metadata.draft = fal
 - `media.takePhoto`
 - `media.getImageInfo`
 - `media.saveImageToPhotosAlbum`
+- `file.stage`
 - `file.upload`
 - `file.download`
 - `device.scanCode`
@@ -669,6 +681,8 @@ bridge 类步骤可以额外携带以下公共可选字段：
 ### `network.listen.clear`
 
 清空一个监听器或当前会话内全部监听器缓冲的网络事件。
+
+已经落入 `network.json` 的历史网络证据不会被删除。`clear` 只会重置后续 listener 作用域下 `wait` / `assert` 使用的活动视图，并向网络产物追加生命周期事件。
 
 可选 input：
 
@@ -915,6 +929,7 @@ bridge 类步骤可以额外携带以下公共可选字段：
 - `media.takePhoto`
 - `media.getImageInfo`
 - `media.saveImageToPhotosAlbum`
+- `file.stage`
 - `file.upload`
 - `file.download`
 - `device.scanCode`
@@ -928,8 +943,10 @@ bridge 类步骤可以额外携带以下公共可选字段：
 - `location.open` 需要 `latitude` 和 `longitude`
 - `media.getImageInfo` 需要 `src`
 - `media.saveImageToPhotosAlbum` 需要 `filePath`
+- `file.stage` 需要类似 `minium://user-data/upload.txt` 的 `filePath`，并提供 `content` 或 `contentBase64`
 - `file.upload` 需要 `url`、`filePath` 和 `name`
 - `file.download` 需要 `url`
+- `file.upload` 默认使用 `POST`，`file.download` 默认使用 `GET`，以便 real runtime 下的网络 mock 稳定匹配
 - `device.makePhoneCall` 需要 `phoneNumber`
 - `subscription.requestMessage` 需要非空 `tmplIds`
 
@@ -937,6 +954,31 @@ bridge 类步骤可以额外携带以下公共可选字段：
 
 - 在 `result` 下返回可序列化 bridge 结果
 - 异步能力要么收敛为最终结构化结果，要么返回 `ACTION_ERROR`
+- real runtime 可上传由 `file.stage` 写入小程序用户数据目录的文件
+
+已 stage 文件上传示例：
+
+```json
+[
+  {
+    "id": "stage-upload-file",
+    "type": "file.stage",
+    "input": {
+      "filePath": "minium://user-data/bridge-demo.txt",
+      "content": "upload fixture"
+    }
+  },
+  {
+    "id": "upload-staged-file",
+    "type": "file.upload",
+    "input": {
+      "url": "https://service.invalid/upload",
+      "filePath": "minium://user-data/bridge-demo.txt",
+      "name": "artifact"
+    }
+  }
+]
+```
 
 ### `touristappid` 下的 Bridge 跳过语义
 
