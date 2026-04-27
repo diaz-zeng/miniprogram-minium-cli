@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 from time import time
 from typing import Any
@@ -323,6 +324,36 @@ class NetworkEvent:
 
 
 @dataclass(slots=True)
+class NetworkRuntimeEvent:
+    """Lifecycle or step-level network event recorded during a run."""
+
+    event_id: str
+    event_type: str
+    sequence: int
+    timestamp_ms: int
+    summary: str
+    request_id: str | None = None
+    listener_id: str | None = None
+    intercept_id: str | None = None
+    step_id: str | None = None
+    data: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "eventId": self.event_id,
+            "type": self.event_type,
+            "sequence": self.sequence,
+            "timestampMs": self.timestamp_ms,
+            "summary": self.summary,
+            "requestId": self.request_id,
+            "listenerId": self.listener_id,
+            "interceptId": self.intercept_id,
+            "stepId": self.step_id,
+            "data": dict(self.data),
+        }
+
+
+@dataclass(slots=True)
 class NetworkListenerState:
     """Registered listener state."""
 
@@ -332,6 +363,12 @@ class NetworkListenerState:
     max_events: int | None = None
     matched_event_ids: list[str] = field(default_factory=list)
     hit_count: int = 0
+    event_ids: list[str] = field(default_factory=list)
+    total_hit_count: int = 0
+    active: bool = True
+    started_at_ms: int = field(default_factory=_now_ms)
+    stopped_at_ms: int | None = None
+    last_clear_sequence: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -341,6 +378,12 @@ class NetworkListenerState:
             "maxEvents": self.max_events,
             "matchedEventIds": list(self.matched_event_ids),
             "hitCount": self.hit_count,
+            "eventIds": list(self.event_ids),
+            "totalHitCount": self.total_hit_count,
+            "active": self.active,
+            "startedAtMs": self.started_at_ms,
+            "stoppedAtMs": self.stopped_at_ms,
+            "lastClearSequence": self.last_clear_sequence,
         }
 
 
@@ -352,6 +395,11 @@ class NetworkInterceptRuleState:
     matcher: NetworkMatcher
     behavior: NetworkInterceptBehavior
     hit_count: int = 0
+    event_ids: list[str] = field(default_factory=list)
+    total_hit_count: int = 0
+    active: bool = True
+    added_at_ms: int = field(default_factory=_now_ms)
+    removed_at_ms: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -359,6 +407,11 @@ class NetworkInterceptRuleState:
             "matcher": self.matcher.to_dict(),
             "behavior": self.behavior.to_dict(),
             "hitCount": self.hit_count,
+            "eventIds": list(self.event_ids),
+            "totalHitCount": self.total_hit_count,
+            "active": self.active,
+            "addedAtMs": self.added_at_ms,
+            "removedAtMs": self.removed_at_ms,
         }
 
 
@@ -368,11 +421,16 @@ class NetworkState:
 
     listeners: dict[str, NetworkListenerState] = field(default_factory=dict)
     intercept_rules: dict[str, NetworkInterceptRuleState] = field(default_factory=dict)
+    listener_history: dict[str, NetworkListenerState] = field(default_factory=dict)
+    intercept_history: dict[str, NetworkInterceptRuleState] = field(default_factory=dict)
     events: list[NetworkEvent] = field(default_factory=list)
+    runtime_events: list[NetworkRuntimeEvent] = field(default_factory=list)
     next_listener_index: int = 0
     next_rule_index: int = 0
     next_request_index: int = 0
     next_event_index: int = 0
+    next_observed_event_index: int = 0
+    next_runtime_event_index: int = 0
 
     def allocate_listener_id(self) -> str:
         self.next_listener_index += 1
@@ -386,19 +444,37 @@ class NetworkState:
         self.next_request_index += 1
         return f"request-{self.next_request_index}"
 
-    def allocate_event_id(self, event_type: str) -> str:
+    def allocate_event_sequence(self) -> int:
         self.next_event_index += 1
-        return f"{event_type}-{self.next_event_index}"
+        return self.next_event_index
 
-    def add_event(self, *, request: dict[str, Any], response: dict[str, Any] | None, listener_ids: list[str], intercept_rule_id: str | None, outcome: str | None) -> NetworkEvent:
+    def allocate_observed_event_id(self, event_type: str) -> str:
+        self.next_observed_event_index += 1
+        return f"{event_type}-{self.next_observed_event_index}"
+
+    def allocate_runtime_event_id(self, event_type: str) -> str:
+        self.next_runtime_event_index += 1
+        return f"{event_type}-{self.next_runtime_event_index}"
+
+    def add_event(
+        self,
+        *,
+        request: dict[str, Any],
+        response: dict[str, Any] | None,
+        listener_ids: list[str],
+        intercept_rule_id: str | None,
+        outcome: str | None,
+    ) -> NetworkEvent:
         event_type = "response" if response is not None else "request"
         request_id = str(request.get("requestId") or self.allocate_request_id())
         request["requestId"] = request_id
+        event_id = self.allocate_observed_event_id(event_type)
+        sequence = self.allocate_event_sequence()
         event = NetworkEvent(
-            event_id=self.allocate_event_id(event_type),
+            event_id=event_id,
             request_id=request_id,
             event_type=event_type,
-            sequence=self.next_event_index,
+            sequence=sequence,
             timestamp_ms=_now_ms(),
             request=request,
             response=response,
@@ -408,19 +484,116 @@ class NetworkState:
         )
         self.events.append(event)
         for listener_id in listener_ids:
-            listener = self.listeners.get(listener_id)
+            listener = self.listener_history.get(listener_id)
             if listener is None:
                 continue
             listener.hit_count += 1
+            listener.total_hit_count += 1
             if listener.max_events is None or len(listener.matched_event_ids) < listener.max_events:
                 listener.matched_event_ids.append(event.event_id)
+            listener.event_ids.append(event.event_id)
+        if intercept_rule_id is not None:
+            rule = self.intercept_history.get(intercept_rule_id)
+            if rule is not None:
+                rule.event_ids.append(event.event_id)
         return event
+
+    def record_runtime_event(
+        self,
+        *,
+        event_type: str,
+        summary: str,
+        request_id: str | None = None,
+        listener_id: str | None = None,
+        intercept_id: str | None = None,
+        step_id: str | None = None,
+        data: dict[str, Any] | None = None,
+        related_request_ids: list[str] | None = None,
+        related_listener_ids: list[str] | None = None,
+        related_intercept_ids: list[str] | None = None,
+    ) -> NetworkRuntimeEvent:
+        event_id = self.allocate_runtime_event_id(event_type.replace(".", "-"))
+        sequence = self.allocate_event_sequence()
+        event = NetworkRuntimeEvent(
+            event_id=event_id,
+            event_type=event_type,
+            sequence=sequence,
+            timestamp_ms=_now_ms(),
+            summary=summary,
+            request_id=request_id,
+            listener_id=listener_id,
+            intercept_id=intercept_id,
+            step_id=step_id,
+            data=dict(data or {}),
+        )
+        self.runtime_events.append(event)
+
+        listener_ids = list(dict.fromkeys((related_listener_ids or []) + ([listener_id] if listener_id else [])))
+        for current_listener_id in listener_ids:
+            listener = self.listener_history.get(current_listener_id)
+            if listener is not None:
+                listener.event_ids.append(event.event_id)
+
+        intercept_ids = list(dict.fromkeys((related_intercept_ids or []) + ([intercept_id] if intercept_id else [])))
+        for current_intercept_id in intercept_ids:
+            rule = self.intercept_history.get(current_intercept_id)
+            if rule is not None:
+                rule.event_ids.append(event.event_id)
+
+        return event
+
+    def count_visible_events(self, listener_id: str | None = None) -> int:
+        if listener_id is not None:
+            listener = self.listener_history.get(listener_id)
+            if listener is None:
+                return 0
+            return sum(
+                1
+                for event in self.events
+                if listener_id in event.listener_ids and event.sequence > listener.last_clear_sequence
+            )
+
+        visible_event_ids: set[str] = set()
+        for listener in self.listeners.values():
+            for event in self.events:
+                if listener.listener_id not in event.listener_ids:
+                    continue
+                if event.sequence <= listener.last_clear_sequence:
+                    continue
+                visible_event_ids.add(event.event_id)
+        return len(visible_event_ids)
+
+    def clear_listener_scope(self, listener_id: str | None = None) -> int:
+        boundary_sequence = self.next_event_index
+        if listener_id is None:
+            cleared_count = 0
+            for listener in self.listener_history.values():
+                cleared_count += listener.hit_count
+                listener.hit_count = 0
+                listener.matched_event_ids.clear()
+                listener.last_clear_sequence = boundary_sequence
+            return cleared_count
+
+        listener = self.listener_history.get(listener_id)
+        if listener is None:
+            return 0
+        cleared_count = listener.hit_count
+        listener.hit_count = 0
+        listener.matched_event_ids.clear()
+        listener.last_clear_sequence = boundary_sequence
+        return cleared_count
+
+    def clone(self) -> "NetworkState":
+        return deepcopy(self)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "listeners": {listener_id: listener.to_dict() for listener_id, listener in self.listeners.items()},
+            "listenerHistory": {listener_id: listener.to_dict() for listener_id, listener in self.listener_history.items()},
             "interceptRules": {rule_id: rule.to_dict() for rule_id, rule in self.intercept_rules.items()},
+            "interceptHistory": {rule_id: rule.to_dict() for rule_id, rule in self.intercept_history.items()},
             "events": [event.to_dict() for event in self.events],
+            "runtimeEvents": [event.to_dict() for event in self.runtime_events],
         }
 
 

@@ -59,6 +59,7 @@ export const SUPPORTED_STEP_TYPES = Object.freeze([
   "media.takePhoto",
   "media.getImageInfo",
   "media.saveImageToPhotosAlbum",
+  "file.stage",
   "file.upload",
   "file.download",
   "device.scanCode",
@@ -193,6 +194,7 @@ const BRIDGE_STEP_TYPES = new Set<SupportedStepType>([
   "media.takePhoto",
   "media.getImageInfo",
   "media.saveImageToPhotosAlbum",
+  "file.stage",
   "file.upload",
   "file.download",
   "device.scanCode",
@@ -342,6 +344,7 @@ export function validatePlan(
 
   const draft = Boolean(typedPlan.metadata && typedPlan.metadata.draft);
   if (Array.isArray(typedPlan.steps)) {
+    const seenStepIds = new Set<string>();
     for (const [index, step] of typedPlan.steps.entries()) {
       if (!step || typeof step !== "object" || Array.isArray(step)) {
         errors.push(`steps[${index}] must be an object.`);
@@ -349,6 +352,10 @@ export function validatePlan(
       }
       if (!step.id || typeof step.id !== "string") {
         errors.push(`steps[${index}] must include a string id.`);
+      } else if (seenStepIds.has(step.id)) {
+        errors.push(`steps[${index}] id must be unique: ${JSON.stringify(step.id)}.`);
+      } else {
+        seenStepIds.add(step.id);
       }
       if (!SUPPORTED_STEP_TYPES.includes(step.type as SupportedStepType)) {
         errors.push(`steps[${index}] uses an unsupported type: ${JSON.stringify(step.type)}`);
@@ -529,6 +536,19 @@ function validateStepShape(step: PlanStep, index: number, plan: Partial<Plan>, e
     }
     case "media.saveImageToPhotosAlbum": {
       requireStringField(step, index, "filePath", errors);
+      break;
+    }
+    case "file.stage": {
+      requireStringField(step, index, "filePath", errors);
+      const hasContent = typeof step.input.content === "string";
+      const hasContentBase64 = typeof step.input.contentBase64 === "string";
+      if (!hasContent && !hasContentBase64) {
+        errors.push(`steps[${index}] file.stage requires content or contentBase64.`);
+      }
+      if (hasContent && hasContentBase64) {
+        errors.push(`steps[${index}] file.stage cannot combine content and contentBase64.`);
+      }
+      requireOptionalStringField(step, index, "encoding", errors);
       break;
     }
     case "file.upload": {

@@ -8,6 +8,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-04-25
+
+### Added
+
+- Run-level `network.json` artifact indexes for events, requests, listeners, and intercepts, plus per-step `networkEvidence` links in `result.json`.
+- Network artifact filtering helper at `skills/miniprogram-minium-cli/scripts/filter-network-artifact.mjs` for reducing large run artifacts to the request graph relevant to selected steps.
+- `file.stage` bridge action for staging deterministic upload fixtures into miniapp user data before `file.upload`.
+- Local fixture-server regression coverage through `examples/demo-regression/network-fixture-server.mjs` and `15-network-local-server.real.plan.json`, covering real `wx.request`, `wx.uploadFile`, and `wx.downloadFile` execution in WeChat DevTools.
+
+### Changed
+
+- Network waits and assertions now use the aligned artifact model so matched request and response evidence is easier for agents to inspect without scanning the full event log.
+- Demo network regression docs now distinguish fast synthetic placeholder baselines from the real local-server network acceptance plan.
+- Archived the completed `add-network-request-controls` OpenSpec change and added main specs for network observation and interception.
+- Updated the release target version to `1.4.0`.
+
+### Fixed
+
+- Prevented the network artifact filtering helper from becoming a no-op when executed from install paths that require file URL escaping.
+- Avoided dangling `networkEvidence` links for failed network steps that reference missing listeners or intercept rules.
+- Rejected duplicate plan step IDs so per-step network evidence and filtered artifact analysis stay scoped to one unique step.
+- Cleared stopped listener buffers during global `network.listen.clear` calls so later listener-scoped assertions cannot match stale events.
+- Rolled back listener and intercept registration state when runtime adapter setup fails.
+
 ## [1.3.0] - 2026-04-17
 
 ### Added

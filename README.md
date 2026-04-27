@@ -66,7 +66,9 @@ Network steps let a plan observe or control request-side behavior without droppi
 - use `network.listen.start` and `network.listen.stop` to scope evidence collection to a session
 - use `network.wait`, `assert.networkRequest`, and `assert.networkResponse` to verify that a click or bridge step emitted the expected request or response
 - use `network.intercept.add`, `network.intercept.remove`, and `network.intercept.clear` to continue, fail, delay, or mock matching requests
-- inspect `network.json` when you need the normalized event log, matched listener IDs, and interception hit counts
+- inspect `result.json.stepResults[].details.networkEvidence` before opening the full network artifact
+- use `node skills/miniprogram-minium-cli/scripts/filter-network-artifact.mjs --result /path/to/result.json --pretty` to shrink `network.json` down to the relevant subgraph
+- inspect the full `network.json` when you need the normalized run-level event log plus `requests`, `listeners`, and `intercepts` indexes
 
 Typical network matcher fields include `url`, `urlPattern`, `method`, `resourceType`, `query`, `headers`, `body`, `statusCode`, `responseHeaders`, and `responseBody`.
 
@@ -364,7 +366,13 @@ Each run produces a dedicated run directory containing:
 - `summary.json`
 - `result.json`
 - `comparison.json`
+- `network.json` for network-aware runs
 - screenshots when configured or when failure forensics are triggered
+
+For network-aware runs:
+
+- `network.json` uses a normalized shape: `schemaVersion`, `events`, `requests`, `listeners`, `intercepts`, and `meta`
+- `result.json.stepResults[]` may include `details.networkEvidence` so a caller can jump back into `network.json` without scraping step-specific output fields
 
 ## Runtime Behavior
 

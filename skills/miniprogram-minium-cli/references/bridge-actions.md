@@ -29,7 +29,7 @@ The currently supported bridge-backed step groups are:
 - `ui.showToast`, `ui.hideToast`, `ui.showLoading`, `ui.hideLoading`, `ui.showModal`, `ui.showActionSheet`
 - `location.get`, `location.choose`, `location.open`
 - `media.chooseImage`, `media.chooseMedia`, `media.takePhoto`, `media.getImageInfo`, `media.saveImageToPhotosAlbum`
-- `file.upload`, `file.download`
+- `file.stage`, `file.upload`, `file.download`
 - `device.scanCode`, `device.makePhoneCall`
 - `auth.login`, `auth.checkSession`
 - `subscription.requestMessage`
@@ -45,6 +45,7 @@ Examples:
 - Prefer `storage.set` over clicking a demo button if the goal is to validate storage behavior directly.
 - Prefer `navigation.navigateTo` when the plan should assert route behavior independently of page controls.
 - Prefer `element.click` when the task is explicitly about a user-visible button flow.
+- Prefer `file.stage` before `file.upload` when a real-runtime upload needs a deterministic fixture inside `wx.env.USER_DATA_PATH`.
 
 ## Common optional fields
 
@@ -136,6 +137,35 @@ If the project uses a developer-owned AppID:
   }
 }
 ```
+
+### Staged upload fixture
+
+Use `file.stage` when a real-runtime upload needs a deterministic fixture that does not come from a miniapp picker, download, camera, canvas, or other miniapp API.
+
+```json
+{
+  "id": "stage-upload-file",
+  "type": "file.stage",
+  "input": {
+    "filePath": "minium://user-data/bridge-demo.txt",
+    "content": "upload fixture"
+  }
+}
+```
+
+```json
+{
+  "id": "upload-staged-file",
+  "type": "file.upload",
+  "input": {
+    "url": "https://service.invalid/upload",
+    "filePath": "minium://user-data/bridge-demo.txt",
+    "name": "artifact"
+  }
+}
+```
+
+Do not use host-only paths such as `/tmp/example.png` for real-runtime uploads unless the miniapp runtime itself returned that path. In real WeChat DevTools, `file.stage` writes the fixture into `wx.env.USER_DATA_PATH` and maps the logical `minium://user-data/...` path to the miniapp-visible file path.
 
 ## Execution guidance
 

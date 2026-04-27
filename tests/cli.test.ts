@@ -303,6 +303,6 @@ test("main prints a network summary in text mode when network artifacts exist", 
   });
 
   assert.equal(exitCode, 0);
-  assert.match(stdout, /Network: 2 events across 1 sessions/);
+  assert.match(stdout, /Network: 3 events across 1 sessions/);
   assert.match(stdout, /Network log:/);
 });

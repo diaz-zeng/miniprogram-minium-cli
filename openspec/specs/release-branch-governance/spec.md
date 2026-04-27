@@ -1,7 +1,7 @@
 # release-branch-governance Specification
 
 ## Purpose
-定义仓库的版本线职责、`main` 的正式发布入口约束，以及多条发布线之间的前向同步规则。
+定义仓库的版本线职责、`main` 的正式发布入口约束，以及多条发布线之间的前向同步规则，确保发布治理可以被自动化检查和人工审查共同执行。
 
 ## Requirements
 

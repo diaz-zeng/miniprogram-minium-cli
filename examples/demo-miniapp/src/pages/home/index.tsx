@@ -18,6 +18,22 @@ const cardStyle = {
   borderRadius: "24rpx",
 };
 
+const DEFAULT_NETWORK_BASE_URL = "https://service.invalid";
+const NETWORK_BASE_URL_STORAGE_KEY = "networkBaseUrl";
+
+function getNetworkBaseUrl() {
+  try {
+    const configuredUrl = Taro.getStorageSync<string>(NETWORK_BASE_URL_STORAGE_KEY);
+    const trimmedUrl = typeof configuredUrl === "string" ? configuredUrl.trim() : "";
+    if (trimmedUrl.length > 0) {
+      return trimmedUrl.replace(/\/+$/, "");
+    }
+  } catch (_error) {
+    return DEFAULT_NETWORK_BASE_URL;
+  }
+  return DEFAULT_NETWORK_BASE_URL;
+}
+
 export default function HomePage() {
   const [snapshot, setSnapshot] = useState(getDemoState());
   const [searchDraft, setSearchDraft] = useState(snapshot.searchKeyword);
@@ -58,14 +74,15 @@ export default function HomePage() {
   };
 
   const handleNetworkRequest = async (kind: "login" | "reviews") => {
+    const baseUrl = getNetworkBaseUrl();
     const requestConfig = kind === "login"
       ? {
-          url: "https://service.invalid/api/login",
+          url: `${baseUrl}/api/login`,
           method: "POST" as const,
           data: { username: "demo-user" },
         }
       : {
-          url: "https://service.invalid/api/reviews?tab=main",
+          url: `${baseUrl}/api/reviews?tab=main`,
           method: "GET" as const,
         };
     setNetworkState(`pending:${kind}`);

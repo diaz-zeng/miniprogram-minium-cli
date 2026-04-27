@@ -50,6 +50,22 @@ _PLACEHOLDER_PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9o9l9x8AAAAASUVORK5CYII="
 )
 
+_USER_DATA_FILE_PREFIX = "minium://user-data/"
+_STAGE_USER_DATA_FILE_FUNCTION = """function miniumCliStageUserDataFile(payload) {
+  var fs = wx.getFileSystemManager();
+  var filePath = wx.env.USER_DATA_PATH + "/" + payload.fileName;
+  var data = payload.contentBase64 != null ? payload.contentBase64 : (payload.content || "");
+  var encoding = payload.contentBase64 != null ? "base64" : (payload.encoding || "utf8");
+  fs.writeFileSync(filePath, data, encoding);
+  return {
+    filePath: filePath,
+    fileName: payload.fileName,
+    encoding: encoding,
+    contentLength: String(data).length,
+    staged: true
+  };
+}"""
+
 
 @dataclass(slots=True)
 class MiniumRuntimeAdapter:
@@ -413,38 +429,7 @@ class MiniumRuntimeAdapter:
     ) -> int:
         """Clear buffered network events."""
         self._ensure_network_runtime_supported(session_metadata)
-        if listener_id is None:
-            cleared_count = len(network_state.events)
-            network_state.events.clear()
-            for listener in network_state.listeners.values():
-                listener.matched_event_ids.clear()
-                listener.hit_count = 0
-            return cleared_count
-
-        listener = network_state.listeners.get(listener_id)
-        if listener is None:
-            return 0
-        cleared_ids = set(listener.matched_event_ids)
-        retained_events: list[NetworkEvent] = []
-        cleared_count = 0
-        for event in network_state.events:
-            if event.event_id not in cleared_ids:
-                retained_events.append(event)
-                continue
-            remaining_listener_ids = [
-                current_listener_id
-                for current_listener_id in event.listener_ids
-                if current_listener_id != listener_id
-            ]
-            if remaining_listener_ids:
-                event.listener_ids = remaining_listener_ids
-                retained_events.append(event)
-                continue
-            cleared_count += 1
-        network_state.events = retained_events
-        listener.matched_event_ids.clear()
-        listener.hit_count = 0
-        return cleared_count
+        return network_state.clear_listener_scope(listener_id)
 
     def add_network_intercept_rule(
         self,
@@ -532,9 +517,13 @@ class MiniumRuntimeAdapter:
         if route_state is not None:
             return route_state
 
-        bridge_method, bridge_args = self._build_bridge_request(step_type, payload)
+        if step_type == "file.stage":
+            return self._execute_real_file_stage_action(session_metadata, app, current_page_path, payload)
+
+        bridge_payload = self._resolve_staged_bridge_payload(session_metadata, step_type, payload)
+        bridge_method, bridge_args = self._build_bridge_request(step_type, bridge_payload)
         if step_type in _BRIDGE_ASYNC_STEP_TYPES:
-            response = self._call_real_bridge_async(app, bridge_method, bridge_args, payload)
+            response = self._call_real_bridge_async(app, bridge_method, bridge_args, bridge_payload)
         else:
             response = app.call_wx_method(bridge_method, bridge_args)
 
@@ -542,6 +531,43 @@ class MiniumRuntimeAdapter:
         return {
             "bridge_method": bridge_method,
             "result": self._extract_bridge_result(response),
+            "current_page_path": self._normalize_page_path(getattr(next_page, "path", current_page_path)),
+        }
+
+    def _execute_real_file_stage_action(
+        self,
+        session_metadata: dict[str, Any],
+        app: Any,
+        current_page_path: str | None,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        requested_path = str(payload["filePath"])
+        file_name = self._user_data_file_name(requested_path)
+        stage_payload = {
+            "fileName": file_name,
+            "content": payload.get("content"),
+            "contentBase64": payload.get("contentBase64"),
+            "encoding": payload.get("encoding"),
+        }
+        response = app.evaluate(
+            _STAGE_USER_DATA_FILE_FUNCTION,
+            args=[self._compact_dict(stage_payload)],
+            sync=True,
+            desc="stage user data file",
+        )
+        result = self._extract_bridge_result(response)
+        if not isinstance(result, dict):
+            result = {}
+        actual_path = str(result.get("filePath") or self._canonical_user_data_file_path(file_name))
+        self._remember_staged_file(session_metadata, requested_path, actual_path, file_name)
+        next_page = app.get_current_page()
+        return {
+            "bridge_method": "stageFile",
+            "result": {
+                **result,
+                "filePath": actual_path,
+                "logicalFilePath": self._canonical_user_data_file_path(file_name),
+            },
             "current_page_path": self._normalize_page_path(getattr(next_page, "path", current_page_path)),
         }
 
@@ -717,7 +743,22 @@ class MiniumRuntimeAdapter:
             result = {"path": payload["src"], "width": 120, "height": 120, "type": "png"}
         elif step_type == "media.saveImageToPhotosAlbum":
             result = {"saved": True, "filePath": payload["filePath"]}
+        elif step_type == "file.stage":
+            requested_path = str(payload["filePath"])
+            file_name = self._user_data_file_name(requested_path)
+            staged_path = self._canonical_user_data_file_path(file_name)
+            self._remember_staged_file(session_metadata, requested_path, staged_path, file_name)
+            content = payload.get("contentBase64") if payload.get("contentBase64") is not None else payload.get("content", "")
+            result = {
+                "filePath": staged_path,
+                "logicalFilePath": staged_path,
+                "fileName": file_name,
+                "encoding": "base64" if payload.get("contentBase64") is not None else payload.get("encoding", "utf8"),
+                "contentLength": len(str(content)),
+                "staged": True,
+            }
         elif step_type == "file.upload":
+            file_path = self._resolve_staged_file_path(session_metadata, str(payload["filePath"])) or payload["filePath"]
             result = {"statusCode": 200, "data": "{\"ok\":true}", "errMsg": "uploadFile:ok"}
             self._emit_placeholder_network_request(
                 session_metadata,
@@ -728,7 +769,7 @@ class MiniumRuntimeAdapter:
                     "query": {},
                     "headers": {},
                     "body": {
-                        "filePath": payload["filePath"],
+                        "filePath": file_path,
                         "name": payload["name"],
                     },
                     "pagePath": page_path,
@@ -972,11 +1013,12 @@ class MiniumRuntimeAdapter:
                     "url": payload["url"],
                     "filePath": payload["filePath"],
                     "name": payload["name"],
+                    "method": payload.get("method") or "POST",
                     "formData": payload.get("formData"),
                 }
             )
         if step_type == "file.download":
-            return "downloadFile", {"url": payload["url"]}
+            return "downloadFile", {"url": payload["url"], "method": payload.get("method") or "GET"}
         if step_type == "device.scanCode":
             return "scanCode", self._compact_dict(
                 {
@@ -1033,6 +1075,7 @@ class MiniumRuntimeAdapter:
             "media.takePhoto": "chooseMedia",
             "media.getImageInfo": "getImageInfo",
             "media.saveImageToPhotosAlbum": "saveImageToPhotosAlbum",
+            "file.stage": "stageFile",
             "file.upload": "uploadFile",
             "file.download": "downloadFile",
             "device.scanCode": "scanCode",
@@ -1058,6 +1101,7 @@ class MiniumRuntimeAdapter:
             "settings": {},
             "ui_state": {"type": None, "title": ""},
             "page_stack": [normalized_page],
+            "staged_files": {},
         }
         session_metadata["bridge_state"] = bridge_state
         return bridge_state
@@ -1189,6 +1233,15 @@ class MiniumRuntimeAdapter:
             "outcome": outcome,
         }
         pending_request_keys.setdefault(interface_name, []).append(pending_key)
+        if rule is not None:
+            rule.total_hit_count += 1
+            network_state.record_runtime_event(
+                event_type="intercept.matched",
+                summary=f"Intercept {rule.rule_id} matched {request.get('method') or 'GET'} {request.get('url') or ''}",
+                request_id=str(request.get("requestId") or ""),
+                intercept_id=rule.rule_id,
+                data={"outcome": outcome},
+            )
 
         listener_ids = self._matching_network_listener_ids(
             network_state,
@@ -1647,11 +1700,14 @@ class MiniumRuntimeAdapter:
             return
         normalized_request = dict(request)
         normalized_request["resourceType"] = normalized_request.get("resourceType") or "request"
+        if not str(normalized_request.get("requestId") or "").strip():
+            normalized_request["requestId"] = network_state.allocate_request_id()
         rule = self._match_network_intercept_rule(network_state, normalized_request)
         resolved_response = dict(response) if isinstance(response, dict) else None
         outcome = "continue"
         if rule is not None:
             rule.hit_count += 1
+            rule.total_hit_count += 1
             outcome = rule.behavior.action
             if outcome == "fail":
                 resolved_response = {
@@ -1666,6 +1722,13 @@ class MiniumRuntimeAdapter:
                 time.sleep(max((rule.behavior.delay_ms or 0) / 1000, 0))
             elif outcome == "mock":
                 resolved_response = dict(rule.behavior.response or {})
+            network_state.record_runtime_event(
+                event_type="intercept.matched",
+                summary=f"Intercept {rule.rule_id} matched {normalized_request.get('method') or 'GET'} {normalized_request.get('url') or ''}",
+                request_id=str(normalized_request.get("requestId") or ""),
+                intercept_id=rule.rule_id,
+                data={"outcome": outcome},
+            )
 
         request_listener_ids = self._matching_network_listener_ids(
             network_state,
@@ -1743,6 +1806,81 @@ class MiniumRuntimeAdapter:
     @staticmethod
     def _compact_dict(payload: dict[str, Any]) -> dict[str, Any]:
         return {key: value for key, value in payload.items() if value is not None}
+
+    def _resolve_staged_bridge_payload(
+        self,
+        session_metadata: dict[str, Any],
+        step_type: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        if step_type != "file.upload":
+            return payload
+        staged_file_path = self._resolve_staged_file_path(session_metadata, str(payload.get("filePath") or ""))
+        if staged_file_path is None:
+            return payload
+        return {**payload, "filePath": staged_file_path}
+
+    @staticmethod
+    def _canonical_user_data_file_path(file_name: str) -> str:
+        return f"{_USER_DATA_FILE_PREFIX}{file_name}"
+
+    def _user_data_file_name(self, file_path: str) -> str:
+        raw_path = str(file_path or "").strip()
+        file_name = raw_path[len(_USER_DATA_FILE_PREFIX) :] if raw_path.startswith(_USER_DATA_FILE_PREFIX) else raw_path
+        if (
+            file_name in {"", ".", ".."}
+            or "/" in file_name
+            or "\\" in file_name
+            or Path(file_name).name != file_name
+        ):
+            raise CliExecutionError(
+                error_code=ErrorCode.PLAN_ERROR,
+                message=t("error.file_stage_path_invalid"),
+                details={
+                    "step_type": "file.stage",
+                    "filePath": file_path,
+                    "expected": f"{_USER_DATA_FILE_PREFIX}<file-name>",
+                },
+            )
+        return file_name
+
+    def _remember_staged_file(
+        self,
+        session_metadata: dict[str, Any],
+        requested_path: str,
+        actual_path: str,
+        file_name: str,
+    ) -> None:
+        bridge_state = session_metadata.get("bridge_state")
+        if not isinstance(bridge_state, dict):
+            bridge_state = {}
+            session_metadata["bridge_state"] = bridge_state
+        staged_files = bridge_state.setdefault("staged_files", {})
+        if not isinstance(staged_files, dict):
+            staged_files = {}
+            bridge_state["staged_files"] = staged_files
+        staged_files[str(requested_path)] = actual_path
+        staged_files[self._canonical_user_data_file_path(file_name)] = actual_path
+
+    def _resolve_staged_file_path(self, session_metadata: dict[str, Any], file_path: str) -> str | None:
+        bridge_state = session_metadata.get("bridge_state")
+        if not isinstance(bridge_state, dict):
+            return None
+        staged_files = bridge_state.get("staged_files")
+        if not isinstance(staged_files, dict):
+            return None
+        resolved = staged_files.get(file_path)
+        if isinstance(resolved, str) and resolved:
+            return resolved
+        if file_path.startswith(_USER_DATA_FILE_PREFIX):
+            try:
+                canonical_path = self._canonical_user_data_file_path(self._user_data_file_name(file_path))
+            except CliExecutionError:
+                return None
+            resolved = staged_files.get(canonical_path)
+            if isinstance(resolved, str) and resolved:
+                return resolved
+        return None
 
     def _extract_bridge_result(self, response: Any) -> Any:
         outer_result = self._lookup_value(response, "result")
@@ -2199,6 +2337,7 @@ class MiniumRuntimeAdapter:
                 "settings": {},
                 "ui_state": {"type": None, "title": ""},
                 "page_stack": [self._normalize_page_path(page_path)],
+                "staged_files": {},
             },
             "project_appid": project_appid,
             "uses_tourist_appid": uses_tourist_appid,

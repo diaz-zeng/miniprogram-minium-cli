@@ -8,6 +8,30 @@
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-04-25
+
+### Added
+
+- 新增运行级 `network.json` artifact 索引，覆盖 events、requests、listeners 与 intercepts，并在 `result.json` 的 step 结果中加入 `networkEvidence` 链接。
+- 新增网络 artifact 过滤辅助脚本 `skills/miniprogram-minium-cli/scripts/filter-network-artifact.mjs`，用于把大型运行产物收缩到与指定步骤相关的请求子图。
+- 新增 `file.stage` bridge action，用于在 `file.upload` 前把确定性的上传 fixture 写入小程序用户数据目录。
+- 新增本地 fixture server 回归覆盖：`examples/demo-regression/network-fixture-server.mjs` 与 `15-network-local-server.real.plan.json`，用于在微信开发者工具真实运行时验证 `wx.request`、`wx.uploadFile` 与 `wx.downloadFile`。
+
+### Changed
+
+- 网络等待与断言已切换到对齐后的 artifact 模型，agent 可以从匹配到的请求/响应证据入手，而不必直接扫描完整事件日志。
+- demo 网络回归文档现在明确区分快速 synthetic placeholder 基线和真实本地 server 网络验收计划。
+- 已归档完成的 `add-network-request-controls` OpenSpec change，并新增网络观测与网络拦截主规格。
+- 发布目标版本更新为 `1.4.0`。
+
+### Fixed
+
+- 修复网络 artifact 过滤辅助脚本在安装路径需要 file URL 转义时可能静默 no-op 的问题。
+- 避免失败的网络步骤在引用缺失 listener 或 intercept rule 时写出悬空的 `networkEvidence` 链接。
+- 拒绝重复的 plan step ID，确保逐步骤网络证据和过滤后的 artifact 分析始终锚定到唯一步骤。
+- 修复全局 `network.listen.clear` 未清理已停止 listener buffer，导致后续按 listener 断言可能命中旧事件的问题。
+- 修复 runtime adapter 注册 listener 或 intercept 失败后仍残留会话状态的问题。
+
 ## [1.3.0] - 2026-04-17
 
 ### Added
