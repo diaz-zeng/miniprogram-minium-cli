@@ -434,6 +434,7 @@ draft plan 作为数据是合法的，但 `exec` 只接受 `metadata.draft = fal
 - 类型：array
 - 必填：是
 - 运行时要求：可执行计划不能为空
+- 每个 step 的 `id` 在同一个 plan 内必须唯一
 
 每个元素都必须包含：
 
@@ -1040,6 +1041,7 @@ CLI 会在以下情况下拒绝执行：
 - `execution.failFast` 不是布尔值
 - `environment.autoScreenshot` 不是 `off`、`on-success` 或 `always`
 - 可执行 plan 的 `steps` 缺失或为空
+- 两个或更多 step 使用了相同的 `id`
 - 存在不支持的 step type
 - 网络 matcher 使用了不受支持的字段，或输入形状非法
 - `network.wait` 同时缺少 `listenerId` 和 `matcher`

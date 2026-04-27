@@ -344,6 +344,7 @@ export function validatePlan(
 
   const draft = Boolean(typedPlan.metadata && typedPlan.metadata.draft);
   if (Array.isArray(typedPlan.steps)) {
+    const seenStepIds = new Set<string>();
     for (const [index, step] of typedPlan.steps.entries()) {
       if (!step || typeof step !== "object" || Array.isArray(step)) {
         errors.push(`steps[${index}] must be an object.`);
@@ -351,6 +352,10 @@ export function validatePlan(
       }
       if (!step.id || typeof step.id !== "string") {
         errors.push(`steps[${index}] must include a string id.`);
+      } else if (seenStepIds.has(step.id)) {
+        errors.push(`steps[${index}] id must be unique: ${JSON.stringify(step.id)}.`);
+      } else {
+        seenStepIds.add(step.id);
       }
       if (!SUPPORTED_STEP_TYPES.includes(step.type as SupportedStepType)) {
         errors.push(`steps[${index}] uses an unsupported type: ${JSON.stringify(step.type)}`);

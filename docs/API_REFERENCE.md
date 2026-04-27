@@ -434,6 +434,7 @@ Fields:
 - Type: array
 - Required: yes
 - Runtime requirement: must not be empty for executable plans
+- Each step `id` must be unique within the plan
 
 Each item must contain:
 
@@ -1040,6 +1041,7 @@ The CLI rejects a plan when:
 - `execution.failFast` is not a boolean
 - `environment.autoScreenshot` is not one of `off`, `on-success`, or `always`
 - `steps` is missing or empty for a runnable plan
+- two or more steps use the same `id`
 - a step type is not supported
 - a network matcher uses an unsupported field or invalid shape
 - `network.wait` omits both `listenerId` and `matcher`

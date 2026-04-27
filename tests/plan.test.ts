@@ -32,6 +32,37 @@ test("validatePlan rejects unsupported step type", () => {
   assert.match(validation.errors.join("\n"), /unsupported/);
 });
 
+test("validatePlan rejects duplicate step ids", () => {
+  const validation = validatePlan({
+    version: PLAN_VERSION,
+    kind: PLAN_KIND,
+    metadata: { draft: false, name: "duplicate-step-id" },
+    execution: { mode: "serial", failFast: true },
+    environment: {
+      projectPath: "/tmp/demo-miniapp",
+      artifactsDir: null,
+      wechatDevtoolPath: null,
+      testPort: 9420,
+      language: "en",
+    },
+    steps: [
+      {
+        id: "step-1",
+        type: "session.start",
+        input: { projectPath: "/tmp/demo-miniapp" },
+      },
+      {
+        id: "step-1",
+        type: "network.listen.start",
+        input: { listenerId: "network-all" },
+      },
+    ],
+  });
+
+  assert.equal(validation.ok, false);
+  assert.match(validation.errors.join("\n"), /id must be unique/);
+});
+
 test("validatePlan accepts supported bridge step types", () => {
   const validation = validatePlan({
     version: PLAN_VERSION,
