@@ -337,7 +337,7 @@ class NetworkService:
         step_id: str | None = None,
     ) -> dict[str, Any]:
         session = self._require_session(session_id)
-        related_listener_ids = [listener_id] if listener_id is not None else list(session.network_state.listeners.keys())
+        related_listener_ids = [listener_id] if listener_id is not None else list(session.network_state.listener_history.keys())
         cleared_count = self.runtime_adapter.clear_network_events(session.metadata, session.network_state, listener_id)
         session.network_state.record_runtime_event(
             event_type="listener.cleared",

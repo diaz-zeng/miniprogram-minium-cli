@@ -567,7 +567,7 @@ class NetworkState:
         boundary_sequence = self.next_event_index
         if listener_id is None:
             cleared_count = 0
-            for listener in self.listeners.values():
+            for listener in self.listener_history.values():
                 cleared_count += listener.hit_count
                 listener.hit_count = 0
                 listener.matched_event_ids.clear()

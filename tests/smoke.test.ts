@@ -528,6 +528,50 @@ test("placeholder network listen clear preserves events still referenced by othe
   assert.equal(requestRecords.length, 1);
 });
 
+test("placeholder network listen clear resets stopped listener history", async () => {
+  const artifactsDir = createArtifactsDir("minium-cli-network-clear-stopped");
+  const plan: Plan = {
+    ...createBasePlan(artifactsDir),
+    metadata: {
+      name: "network-clear-stopped",
+      draft: false,
+    },
+    steps: [
+      { id: "step-1", type: "session.start", input: { projectPath: "." } },
+      { id: "step-2", type: "network.listen.start", input: { listenerId: "network-all", captureResponses: true } },
+      { id: "step-3", type: "element.click", input: { locator: { type: "id", value: "login-button" } } },
+      { id: "step-4", type: "network.listen.stop", input: { listenerId: "network-all" } },
+      { id: "step-5", type: "network.listen.clear", input: {} },
+      {
+        id: "step-6",
+        type: "assert.networkRequest",
+        input: {
+          listenerId: "network-all",
+          matcher: { url: "/api/login", method: "POST" },
+          count: 0,
+        },
+      },
+      { id: "step-7", type: "session.close", input: {} },
+    ],
+  };
+
+  const execution = await executePlanWithPython(plan);
+  assert.equal(execution.response.ok, true);
+  const result = execution.response.result as Record<string, unknown>;
+  const summary = result.summary as Record<string, unknown>;
+  const stepResults = result.stepResults as Array<Record<string, unknown>>;
+
+  assert.equal(summary.status, "passed");
+  assert.equal(
+    (stepResults[4]?.output as Record<string, unknown>).cleared_event_count,
+    2,
+  );
+  assert.equal(
+    (stepResults[5]?.output as Record<string, unknown>).matched_count,
+    0,
+  );
+});
+
 test("placeholder listener id reuse does not match stale events from a stopped listener", async () => {
   const artifactsDir = createArtifactsDir("minium-cli-network-listener-reuse");
   const plan: Plan = {
