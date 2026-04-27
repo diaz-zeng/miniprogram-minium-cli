@@ -24,6 +24,14 @@
 - 已归档完成的 `add-network-request-controls` OpenSpec change，并新增网络观测与网络拦截主规格。
 - 发布目标版本更新为 `1.4.0`。
 
+### Fixed
+
+- 修复网络 artifact 过滤辅助脚本在安装路径需要 file URL 转义时可能静默 no-op 的问题。
+- 避免失败的网络步骤在引用缺失 listener 或 intercept rule 时写出悬空的 `networkEvidence` 链接。
+- 拒绝重复的 plan step ID，确保逐步骤网络证据和过滤后的 artifact 分析始终锚定到唯一步骤。
+- 修复全局 `network.listen.clear` 未清理已停止 listener buffer，导致后续按 listener 断言可能命中旧事件的问题。
+- 修复 runtime adapter 注册 listener 或 intercept 失败后仍残留会话状态的问题。
+
 ## [1.3.0] - 2026-04-17
 
 ### Added

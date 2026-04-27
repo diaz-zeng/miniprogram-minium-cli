@@ -24,6 +24,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Archived the completed `add-network-request-controls` OpenSpec change and added main specs for network observation and interception.
 - Updated the release target version to `1.4.0`.
 
+### Fixed
+
+- Prevented the network artifact filtering helper from becoming a no-op when executed from install paths that require file URL escaping.
+- Avoided dangling `networkEvidence` links for failed network steps that reference missing listeners or intercept rules.
+- Rejected duplicate plan step IDs so per-step network evidence and filtered artifact analysis stay scoped to one unique step.
+- Cleared stopped listener buffers during global `network.listen.clear` calls so later listener-scoped assertions cannot match stale events.
+- Rolled back listener and intercept registration state when runtime adapter setup fails.
+
 ## [1.3.0] - 2026-04-17
 
 ### Added

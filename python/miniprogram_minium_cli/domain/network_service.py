@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import time
@@ -263,7 +264,9 @@ class NetworkService:
     def start_listener(self, session_id: str, config: NetworkListenConfig, *, step_id: str | None = None) -> dict[str, Any]:
         session = self._require_session(session_id)
         listener_id = config.listener_id or session.network_state.allocate_listener_id()
-        listener = session.network_state.listener_history.get(listener_id)
+        previous_listener = session.network_state.listener_history.get(listener_id)
+        previous_active_listener = session.network_state.listeners.get(listener_id)
+        listener = deepcopy(previous_listener)
         if listener is None:
             listener = NetworkListenerState(
                 listener_id=listener_id,
@@ -272,7 +275,6 @@ class NetworkService:
                 max_events=config.max_events,
                 last_clear_sequence=session.network_state.next_event_index,
             )
-            session.network_state.listener_history[listener_id] = listener
         else:
             listener.matcher = config.matcher
             listener.capture_responses = config.capture_responses
@@ -283,8 +285,13 @@ class NetworkService:
             listener.started_at_ms = _now_ms()
             listener.stopped_at_ms = None
             listener.last_clear_sequence = session.network_state.next_event_index
+        session.network_state.listener_history[listener_id] = listener
         session.network_state.listeners[listener_id] = listener
-        self.runtime_adapter.start_network_listener(session.metadata, session.network_state, listener)
+        try:
+            self.runtime_adapter.start_network_listener(session.metadata, session.network_state, listener)
+        except Exception:
+            self._restore_listener_state(session.network_state, listener_id, previous_listener, previous_active_listener)
+            raise
         session.network_state.record_runtime_event(
             event_type="listener.started",
             summary=f"Listener {listener_id} started",
@@ -434,10 +441,11 @@ class NetworkService:
     def add_intercept_rule(self, session_id: str, config: NetworkInterceptConfig, *, step_id: str | None = None) -> dict[str, Any]:
         session = self._require_session(session_id)
         rule_id = config.rule_id or session.network_state.allocate_rule_id()
-        rule = session.network_state.intercept_history.get(rule_id)
+        previous_rule = session.network_state.intercept_history.get(rule_id)
+        previous_active_rule = session.network_state.intercept_rules.get(rule_id)
+        rule = deepcopy(previous_rule)
         if rule is None:
             rule = NetworkInterceptRuleState(rule_id=rule_id, matcher=config.matcher, behavior=config.behavior)
-            session.network_state.intercept_history[rule_id] = rule
         else:
             rule.matcher = config.matcher
             rule.behavior = config.behavior
@@ -445,8 +453,13 @@ class NetworkService:
             rule.active = True
             rule.added_at_ms = _now_ms()
             rule.removed_at_ms = None
+        session.network_state.intercept_history[rule_id] = rule
         session.network_state.intercept_rules[rule_id] = rule
-        self.runtime_adapter.add_network_intercept_rule(session.metadata, session.network_state, rule)
+        try:
+            self.runtime_adapter.add_network_intercept_rule(session.metadata, session.network_state, rule)
+        except Exception:
+            self._restore_intercept_state(session.network_state, rule_id, previous_rule, previous_active_rule)
+            raise
         session.network_state.record_runtime_event(
             event_type="intercept.added",
             summary=f"Intercept {rule_id} added",
@@ -774,6 +787,38 @@ class NetworkService:
         if not normalized:
             return None
         return f"{session_id}/{normalized}"
+
+    @staticmethod
+    def _restore_listener_state(
+        network_state: NetworkState,
+        listener_id: str,
+        previous_listener: NetworkListenerState | None,
+        previous_active_listener: NetworkListenerState | None,
+    ) -> None:
+        if previous_listener is None:
+            network_state.listener_history.pop(listener_id, None)
+        else:
+            network_state.listener_history[listener_id] = previous_listener
+        if previous_active_listener is None:
+            network_state.listeners.pop(listener_id, None)
+        else:
+            network_state.listeners[listener_id] = previous_active_listener
+
+    @staticmethod
+    def _restore_intercept_state(
+        network_state: NetworkState,
+        rule_id: str,
+        previous_rule: NetworkInterceptRuleState | None,
+        previous_active_rule: NetworkInterceptRuleState | None,
+    ) -> None:
+        if previous_rule is None:
+            network_state.intercept_history.pop(rule_id, None)
+        else:
+            network_state.intercept_history[rule_id] = previous_rule
+        if previous_active_rule is None:
+            network_state.intercept_rules.pop(rule_id, None)
+        else:
+            network_state.intercept_rules[rule_id] = previous_active_rule
 
     @staticmethod
     def _has_network_event_id(network_state: NetworkState, event_id: str) -> bool:
